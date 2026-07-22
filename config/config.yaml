@@ -1,0 +1,10 @@
+# 大模型基础配置
+llm:
+  base_url: "https://api.deepseek.com"
+  model: "deepseek-v4-flash"
+  timeout: 30
+  max_retry: 1
+
+# 评测配置
+eval:
+  output_dir: "./output"

@@ -1,0 +1,15 @@
+# 合规校验敏感词库
+sensitive_words:
+  - "敏感词示例1"
+  - "敏感词示例2"
+
+# 有效性校验规则
+validity:
+  min_length: 5
+  max_repeat_rate: 0.7
+
+# 打分权重
+score_weight:
+  relevance: 0.4
+  completeness: 0.3
+  compliance: 0.3

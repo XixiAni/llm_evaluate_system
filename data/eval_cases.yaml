@@ -1,0 +1,12 @@
+eval_case_list:
+  - case_id: EVAL_001
+    case_desc: "基础问答能力评测：Python是什么"
+    prompt: "请用一句话解释Python是什么"
+    standard_answer: "Python是一种解释型、面向对象的高级编程语言"
+    expect_keywords: ["编程语言", "解释型", "高级"]
+
+  - case_id: EVAL_002
+    case_desc: "知识准确性评测：AI测试开发职责"
+    prompt: "AI测试开发工程师的核心职责是什么"
+    standard_answer: "核心职责包括AI产品接口测试、自动化框架开发、模型效果评测、质量保障体系搭建"
+    expect_keywords: ["测试", "自动化", "模型", "质量"]

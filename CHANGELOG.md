@@ -1,0 +1,17 @@
+# Changelog
+所有版本变更记录在此文件中，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，
+版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/) 规范。
+
+## [v0.1.0] - 2026-07-22
+### Added
+- 完成 AI大模型自动化评测系统 核心框架搭建，采用四层分层解耦架构
+- 全量复用[项目一](https://github.com/XixiAni/ai_model_eval_framework)、[项目二](https://github.com/XixiAni/playwright_ui_po_autotest_framework)成熟底层组件，保证基底稳定性
+- 新增 LLMClient 大模型请求客户端，兼容OpenAI协议，支持网络异常自动重试、密钥脱敏、统一返回格式
+- 新增 YAML 数据驱动评测体系，评测用例与代码完全分离，支持批量加载与校验
+- 新增 BatchEvalRunner 批量评测执行引擎，单用例异常隔离机制，单条失败不阻断整体流程
+- 新增 ResponseValidator 响应校验模块，覆盖有效性校验（空答/长度/重复率）与合规性校验（敏感词检测）
+- 新增 AnswerScorer 智能评分模块，实现多维加权打分算法与规则版幻觉检测能力
+- 新增 EvalReporter 评测报告模块，支持导出CSV格式评测结果，Excel直接打开无乱码
+- 集成标准化日志体系，控制台+文件双输出，按日期自动拆分日志文件
+- 落地企业级安全规范，密钥通过环境变量/.env文件读取，无硬编码，支持敏感信息脱敏
+- 新增项目配套文档：README.md、DETAILED_USAGE.md
