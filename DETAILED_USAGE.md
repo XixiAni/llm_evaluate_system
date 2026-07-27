@@ -187,12 +187,44 @@ code值 含义
 7. main.py → EvalReporter.export_csv() → 生成CSV评测报告
  
 ### 5.2 参数传递链路
- 
-config.yaml / eval_rules.yaml → YamlReader读取 → 各模块初始化时加载参数  
-                                 ↓
-data/eval_cases.yaml → YamlReader读取 → BatchEvalRunner逐条传入执行  
-                                 ↓
-LLMClient → 返回回答内容 → Validator → Scorer → 结果字典 → Reporter导出
+
+1. 基于文件驱动的结构：
+
+```mermaid
+flowchart LR
+    A["config.yaml / eval_rules.yaml"] --> B["YamlReader读取"]
+    B --> C["各模块初始化时加载参数"]
+    C -.全局配置供给.-> F
+
+    D["data/eval_cases.yaml"] --> E["YamlReader读取"]
+    E --> F["BatchEvalRunner逐条传入执行"]
+
+    F --> G["LLMClient"]
+    G --> H["返回回答内容"]
+    H --> I["Validator"]
+    I --> J["Scorer"]
+    J --> K["结果字典"]
+    K --> L["Reporter导出"]
+```
+
+2. 基于内存参数流转的结构
+
+```mermaid
+flowchart LR
+    A["全局配置参数实体"] --> C["各业务模块内存初始化"]
+    C -.注入全局规则.-> F & I & J
+    
+    D["单条评测用例参数实体"] --> F["BatchEvalRunner"]
+    F --> G["LLMClient"]
+    G --> H["模型响应数据"]
+    H --> I["Validator"]
+    I --> J["Scorer"]
+    J --> K["结构化评测结果对象"]
+    K --> L["Reporter"]
+```
+> 视角说明：  
+文件驱动链路：以项目真实配置文件为起点，完整展示数据源读取、任务执行全流程，便于快速对应工程目录；  
+内存参数流转链路：屏蔽磁盘IO细节，聚焦程序运行时内存对象在各个模块之间的数据传递逻辑，适合讲解底层运行原理
   
 ## 6 核心数据结构说明
  

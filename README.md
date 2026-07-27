@@ -65,7 +65,7 @@ python main.py
 ├── common/             # 公共工具层：全项目复用基础组件
 │   ├── logger.py       # 标准化日志工具，控制台+文件双输出
 │   └── yaml_reader.py  # YAML配置读取工具，支持缓存、点式路径、环境变量占位
-├── config/             # 配置文件层：所有可变参数外置
+├── config/             # 配置文件层：所有可变参数
 │   ├── config.yaml     # 全局框架配置
 │   └── eval_rules.yaml # 评测规则配置（敏感词、权重、校验阈值）
 ├── core/               # 核心业务层：评测核心逻辑
