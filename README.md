@@ -23,48 +23,44 @@ flowchart TD
     B --> E[报告输出层 report]
 ```
 
-📦 环境依赖
+## 📦 环境依赖
 
  
 - Python 3.8+
 - 可用的大模型API密钥（兼容OpenAI协议标准）
 - 完整依赖清单见 requirements.txt
  
-🚀 快速上手
+## 🚀 快速上手
  
-1. 安装依赖
- 
+### 1. 安装依赖
+
 ```bash
-  
 pip install -r requirements.txt
 ```
  
-2. 配置密钥
-项目根目录创建  .env  文件（复制  .env.example  模板修改即可）：
+### 2. 配置密钥
+项目根目录创建  `.env`  文件（复制  `.env.example`  模板修改即可）：
  
 ```ini
-  
 AI_API_KEY=sk-你的大模型密钥
 LLM_MODEL=deepseek-v4-flash
-``` 
+```
  
-3. 运行评测
- 
-```bash
-  
+### 3. 运行评测
+
+```bash  
 python main.py
-``` 
+```
  
-4. 查看结果
- 
+### 4. 查看结果
+
 - 控制台输出：实时执行日志 + 评测指标汇总报告
 - CSV报告： ./output/eval_report.csv （Excel直接打开）
 - 全链路日志： ./logs/  目录按日期拆分
  
-📁 项目目录结构
+## 📁 项目目录结构
  
 ```text
-  
 ├── common/             # 公共工具层：全项目复用基础组件
 │   ├── logger.py       # 标准化日志工具，控制台+文件双输出
 │   └── yaml_reader.py  # YAML配置读取工具，支持缓存、点式路径、环境变量占位
@@ -85,13 +81,13 @@ python main.py
 ├── main.py             # 项目唯一入口
 ├── requirements.txt    # 项目依赖清单
 └── README.md           # 项目说明文档
-``` 
+```
+
+## 📖 更多文档
  
-📖 更多文档
- 
-- 详细使用与原理说明：见 [DETAILED_USAGE.md](DETAILED_USAGE.md)，包含完整调用链路、代码详解、选型考量
+- 详细使用与原理说明：见[DETAILED_USAGE.md](DETAILED_USAGE.md)，包含完整调用链路、代码详解、选型考量
 - 版本变更记录：见 [CHANGELOG.md](CHANGELOG.md)
  
-📄 License
- 
+## 📄 License
+
 本项目采用 MIT 协议开源，详见 [LICENSE](LICENSE) 文件。

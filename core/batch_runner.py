@@ -8,17 +8,33 @@ from core.scorer import AnswerScorer
 logger = get_logger("batch_runner")
 
 class BatchEvalRunner:
+    """
+    批量评测执行器
+    采用依赖注入模式接收LLM客户端，逐条执行用例，单条异常隔离不影响整体任务
+    统一收集所有用例的执行结果，用于后续统计与导出
+    """
     def __init__(self, llm_client: LLMClient):
-        # 依赖注入模式，和项目一完全一致
+        """
+        初始化批量执行器，注入LLM客户端，实例化校验器与评分器
+        Args:
+            llm_client: 已初始化的大模型客户端实例
+        """
         self.llm_client = llm_client
         self.validator = ResponseValidator()
         self.scorer = AnswerScorer()
         self.eval_result_list: List[Dict[str, Any]] = []
 
     def run_single_case(self, case_info: Dict[str, Any]) -> Dict[str, Any]:
-        """单条用例执行，自带异常容错，单条失败不影响整体"""
+        """
+        执行单条评测用例，完整链路：请求模型 → 有效性校验 → 合规性校验 → 评分与幻觉检测
+        全链路异常捕获，保证单条用例失败不中断批量任务
+        Args:
+            case_info: 单条用例字典，包含case_id、case_desc、prompt、expect_keywords、standard_answer等
+        Returns:
+            dict: 标准化单条用例执行结果
+        """
         start_time = time.time()
-        # 默认结果初始化，和项目一逻辑完全一致
+        
         single_result = {
             "case_id": case_info.get("case_id", "unknown_id"),
             "case_desc": case_info.get("case_desc", "unknown_desc"),
@@ -74,7 +90,13 @@ class BatchEvalRunner:
         return single_result
 
     def run_batch_cases(self, case_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """批量执行所有评测用例"""
+        """
+        批量执行所有评测用例，清空历史结果后依次执行
+        Args:
+            case_list: 评测用例列表
+        Returns:
+            list: 所有用例的执行结果列表
+        """
         self.eval_result_list.clear()
         print(f"===== 开始批量评测，共加载 {len(case_list)} 条评测用例 =====")
         for case in case_list:
@@ -83,4 +105,9 @@ class BatchEvalRunner:
         return self.eval_result_list
 
     def get_all_results(self) -> List[Dict[str, Any]]:
+        """
+        获取已执行的所有评测结果
+        Returns:
+            list: 评测结果列表
+        """
         return self.eval_result_list

@@ -13,10 +13,10 @@ __pycache__/
 # 日志文件
 logs/
 *.log
+git上传记录/
 
 # 输出文件
 output/
-report/
 
 # 其他本地内容
 进度条.md

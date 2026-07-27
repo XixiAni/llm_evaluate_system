@@ -28,6 +28,13 @@ console_handler.setLevel(logging.INFO)
 logging.getLogger().addHandler(console_handler)
 
 def get_logger(name: str = "llm_evaluator") -> logging.Logger:
+    """
+    获取指定名称的日志记录器实例，复用根日志器的处理器与格式配置
+    Args:
+        name: 日志记录器名称，通常传入模块名用于日志溯源，默认值'llm_evaluator'
+    Returns:
+        logging.Logger: 配置完成的日志记录器对象，支持控制台+文件双输出
+    """
     logger = logging.getLogger(name)
     logger.propagate = True
     return logger
