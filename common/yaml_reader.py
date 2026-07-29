@@ -9,7 +9,9 @@ logger = get_logger("yaml_reader")
 class YamlReader:
     """
     YAML配置与测试数据统一读取工具类
+
     核心能力：文件级缓存、点式路径嵌套取值、环境变量占位符替换、多环境配置支持
+
     所有方法均为类方法，无需实例化即可调用
     """
     _cache: dict[str, dict] = {}
@@ -26,22 +28,27 @@ class YamlReader:
         logger.info(f"全局运行环境已设置为：{env_name}")
 
     @classmethod
-    def _replace_env_var(cls, value: Any) -> Any:
-        """
-        替换字符串中的环境变量占位符，格式为 ${变量名}
-        非字符串类型直接原样返回
+    def _replace_env_var_recursive(cls, value: Any) -> Any:
+        """递归替换值中的环境变量占位符，支持字符串、字典、列表嵌套结构。
+
+        占位符格式：${变量名}，未匹配到的占位符保持原样返回。
         Args:
-            value: 待替换的原始值
+             value: 待替换的原始值，支持任意数据类型。
         Returns:
-            Any: 完成环境变量替换后的值，未匹配到的占位符保持原样
+             完成占位符替换后的值，类型与输入一致。
         """
-        if not isinstance(value, str):
+        if isinstance(value, str):
+            pattern = r"\$\{([\w-]+)\}"
+            def _replace(match: re.Match) -> str:
+                var_name = match.group(1)
+                return os.environ.get(var_name, match.group(0))
+            return re.sub(pattern, _replace, value)
+        elif isinstance(value, dict):
+            return {k: cls._replace_env_var_recursive(v) for k, v in value.items()}
+        elif isinstance(value, list):
+            return [cls._replace_env_var_recursive(item) for item in value]
+        else:
             return value
-        pattern = r"\$\{([\w-]+)\}"
-        def _replace(match):
-            var_name = match.group(1)
-            return os.environ.get(var_name, match.group(0))
-        return re.sub(pattern, _replace, value)
 
     @classmethod
     def _get_config_path(cls, filename: str) -> str:
@@ -79,7 +86,6 @@ class YamlReader:
                 raise KeyError(err_msg)
             current_node = current_node[key]
         logger.info(f"配置读取成功：{key_path} = {current_node}")
-        current_node = cls._replace_env_var(current_node)
         return current_node
 
     @classmethod
@@ -89,7 +95,7 @@ class YamlReader:
         Args:
             filename: 配置文件名称（含后缀）
         Returns:
-            dict: 解析后的YAML配置字典
+            dict: 解析后的YAML配置字典,已完成全量环境变量占位符替换
         Raises:
             FileNotFoundError: 配置文件不存在时抛出
             Exception: YAML格式解析失败时抛出
@@ -101,6 +107,8 @@ class YamlReader:
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
+            # 递归替换所有层级的环境变量
+            data = cls._replace_env_var_recursive(data)
             cls._cache[file_path] = data
             logger.info(f"配置文件 {filename} 读取完成，存入缓存")
             return data
@@ -112,28 +120,37 @@ class YamlReader:
             raise
 
     @classmethod
-    def get(cls, filename: str, key_path: str) -> Any:
+    def get(cls, filename: str, key_path: str, default: Any = None) -> Any:
         """
-        读取config目录下配置文件的指定节点值，支持点式路径
+        读取config目录下配置文件的指定节点值，支持点式路径与默认值兜底
         Args:
             filename: 配置文件名称
             key_path: 点分隔的嵌套键路径
+            default: 默认值，当键读取失败时返回
         Returns:
-            Any: 配置节点对应的值
+            Any: 配置节点对应的值,读取失败则返回default
+        Raises:
+            KeyError: 配置节点不存在时抛出
+            FileNotFoundError: 配置文件不存在时抛出
         """
         logger.info(f"读取配置节点，文件：{filename}，路径：{key_path}")
-        data = cls.read_file(filename)
-        return cls._get_by_dot_path(data, key_path, error_prefix="配置读取失败：")
+        try:
+            data = cls.read_file(filename)
+            return cls._get_by_dot_path(data, key_path, error_prefix="配置读取失败：")
+        except KeyError:
+            logger.warning(f"配置节点不存在，返回默认值：{default}")
+            return default
 
     @classmethod
-    def get_test_data(cls, filename: str, key_path: str = None) -> Any:
+    def get_test_data(cls, filename: str, key_path: str = None, default: Any = None) -> Any:
         """
         读取data目录下的评测用例数据文件，支持全量读取或指定节点读取
         Args:
             filename: 测试数据文件名称
             key_path: 可选，点分隔的嵌套键路径，不传则返回全量数据
+            default: 默认值，当键读取失败时返回
         Returns:
-            Any: 测试数据内容，列表或字典
+            Any: 测试数据内容，列表或字典；读取失败则返回default
         Raises:
             FileNotFoundError: 测试数据文件不存在时抛出
             Exception: YAML格式解析失败时抛出
@@ -147,14 +164,20 @@ class YamlReader:
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     data = yaml.safe_load(f)
+                # 递归替换所有层级的环境变量
+                data = cls._replace_env_var_recursive(data)
                 cls._cache[file_path] = data
                 logger.info(f"测试数据文件 {filename} 读取完成，存入缓存")
             except FileNotFoundError as e:
                 logger.error(f"测试数据文件不存在：{file_path}，异常：{str(e)}", exc_info=True)
-                raise
+                return default
             except Exception as e:
                 logger.error(f"读取测试数据文件异常：{file_path}，异常：{str(e)}", exc_info=True)
-                raise
+                return default
         if not key_path:
             return data
-        return cls._get_by_dot_path(data, key_path, error_prefix="测试数据读取失败：")
+        try:
+            return cls._get_by_dot_path(data, key_path, error_prefix="测试数据读取失败：")
+        except KeyError:
+            logger.warning(f"测试数据节点不存在，返回默认值：{default}")
+            return default
