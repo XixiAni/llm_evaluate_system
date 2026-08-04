@@ -13,3 +13,10 @@ score_weight:
   relevance: 0.4
   completeness: 0.3
   compliance: 0.3
+
+# 幻觉检测规则
+hallucination:
+  # 低风险阈值：新增实词数量 ≤ 该值 判定为低风险
+  low_risk_threshold: 3
+  # 高风险阈值：新增实词数量 > 该值 判定为高风险
+  high_risk_threshold: 6

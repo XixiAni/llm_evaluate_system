@@ -1,5 +1,5 @@
 # AI大模型自动化评测系统 详细使用手册
-> 最后更新时间：2026年7月 | 版本：v0.1.2
+> 最后更新时间：2026年8月 | 版本：v0.1.3
 
 ## 1 工具简介
 本系统是面向AI测试开发的大模型质量专项评测工具，聚焦大模型输出内容的质量评估，覆盖批量问答、有效性校验、合规检测、幻觉识别、量化打分全流程，采用数据驱动设计，评测用例与代码完全解耦，可用于大模型版本回归测试、效果基线对比、内容安全专项评测等场景。
@@ -44,10 +44,10 @@ pip install -r requirements.txt
  
 - 核心能力：  
 1. 双输出通道：控制台实时打印 + 本地日志文件持久化  
-2. 按日期拆分：每天自动生成独立日志文件，命名格式  年-月-日.log   
+2. 按日期拆分：每天自动生成独立日志文件，命名格式  `年-月-日.log`   
 3. 防重复机制：子logger通过传播复用根logger处理器，杜绝日志重复打印  
-4. 自动建目录：首次运行自动创建 logs/ 文件夹
-- 调用方式：各模块通过  get_logger("模块名")  获取独立日志实例
+4. 自动建目录：首次运行自动创建 `logs/` 文件夹
+- 调用方式：各模块通过  `get_logger("模块名")`  获取独立日志实例
 > 复用来源：[项目二](https://github.com/XixiAni/playwright_ui_po_autotest_framework) 100% 完整复用 
 
 #### 4.1.2 yaml_reader.py YAML读取工具
@@ -55,15 +55,15 @@ pip install -r requirements.txt
 - 核心能力：  
 1. 类方法调用：无需实例化，直接通过类名调用  
 2. 文件缓存机制：同一份文件全程仅读取一次磁盘，减少IO开销  
-3. 点式路径取值：支持  llm.base_url  格式嵌套路径读取，无需多层字典索引  
-4. 环境变量占位符：支持  ${VAR_NAME}  格式，读取时自动替换为系统环境变量值  
+3. 点式路径取值：支持  `llm.base_url`  格式嵌套路径读取，无需多层字典索引  
+4. 环境变量占位符：支持  `${VAR_NAME}`  格式，读取时自动替换为系统环境变量值  
 5. 多环境支持：全局环境标识管理、环境配置读取、配置自动合并（当前版本未主动调用，能力保留）  
 6. 三类读取入口：
--  get() ：读取全局公共配置
--  get_test_data() ：读取评测数据集文件
--  get_env() ：读取环境差异化配置（预留扩展）
+-  `get()` ：读取全局公共配置
+-  `get_test_data()` ：读取评测数据集文件
+-  `get_env()` ：读取环境差异化配置（预留扩展）
 7. 新增递归式环境变量占位符替换，支持字符串、嵌套字典、列表全层级自动替换  
-8. get 、 get_test_data 方法新增 default 默认值参数，配置节点缺失时自动降级，不抛出异常
+8. `get` 、 `get_test_data` 方法新增 default 默认值参数，配置节点缺失时自动降级，不抛出异常
 > 复用来源：[项目二](https://github.com/XixiAni/playwright_ui_po_autotest_framework) 100% 完整复用，所有能力完整保留  
 
 #### 4.1.3 error_code 全局错误码
@@ -77,38 +77,38 @@ pip install -r requirements.txt
  
 - 核心职责：统一封装大模型接口请求，处理鉴权、超时、重试、异常、响应解析
 - 核心方法说明：  
-1.  __init__  初始化
-- 密钥读取优先级：实例化传入 > 系统环境变量 > .env文件
+1.  `__init__`  初始化
+- 密钥读取优先级：实例化传入 > 系统环境变量 > `.env`文件
 - 初始化Session会话，复用连接池；自动生成脱敏后的鉴权头用于日志打印
 - 配置全局超时、重试次数、SSL校验开关  
-2.  send_post()  通用POST请求
+2.  `send_post()`  通用POST请求
 - 底层核心请求方法，完整保留[项目一](https://github.com/XixiAni/ai_model_eval_framework)的三重异常分层、自动重试逻辑
 - 仅捕获超时/连接错误进行重试，其他异常直接返回，避免无效重试
 - 统一返回  code/data/msg  三层结构，上层代码无需处理异构响应  
-3.  chat()  快捷对话方法（新增业务封装）
-- 基于  send_post  封装的业务快捷方法，无新增底层API
+3.  `chat()`  快捷对话方法（新增业务封装）
+- 基于  `send_post`  封装的业务快捷方法，无新增底层API
 - 自动构造标准对话请求体，自动提取回答内容
-- 新增  code=-3  状态码，标记「请求成功但回答提取失败」场景
+- 新增  `code=-3`  状态码，标记「请求成功但回答提取失败」场景
 - 状态码说明：  
 code值 含义  
  0 全流程成功  
 -1 网络/HTTP链路故障  
 -2 响应内容非JSON格式  
 -3 请求成功但提取回答内容失败 
-> 复用来源：90% 复用[项目一](https://github.com/XixiAni/ai_model_eval_framework)  AiApiRequest ，仅新增业务快捷方法
+> 复用来源：90% 复用[项目一](https://github.com/XixiAni/ai_model_eval_framework)  `AiApiRequest` ，仅新增业务快捷方法
 
 #### 4.2.2 validator.py 响应校验模块
  
 - 核心职责：对大模型返回的回答内容做基础质量校验，分为有效性与合规性两个维度
 - 核心方法说明：  
-1.  validate_all()  全量校验入口
+1.  `validate_all()`  全量校验入口
 - 顺序调用有效性校验与合规性校验，返回统一结果字典  
-2.  _validate_validity()  有效性校验
+2.  `_validate_validity()`  有效性校验
 - 空内容校验：判断回答是否为空或仅空白字符
 - 长度校验：回答长度小于阈值标记为无效
 - 重复率校验：统计字符出现频率，高重复内容标记为无效
 > 重复率计算原理：通过字典统计每个字符出现的次数，取出现次数最多的字符除以总字符长度得到重复率。该方案可快速识别无意义复读类低质量回答，阈值可通过  `eval_rules.yaml`  灵活调整。  
-3.  _validate_compliance()  合规性校验
+3.  `_validate_compliance()`  合规性校验
 - 敏感词匹配：遍历配置的敏感词列表，检测是否命中
 - 核心逻辑与[项目一](https://github.com/XixiAni/ai_model_eval_framework)「关键词包含断言」完全一致，仅将断言改为结果返回
 - 设计思想：规则前置，快速过滤低质量回答，减少后续打分模块的无效计算；所有校验规则均可通过YAML配置调整，无需改代码。
@@ -116,26 +116,30 @@ code值 含义
 
 #### 4.2.3 scorer.py 智能评分与幻觉检测模块
  
-- 核心职责：对有效回答进行多维度量化打分，并执行规则版幻觉检测
+- 核心职责：对有效回答进行多维度量化打分，并执行基于规则的幻觉检测
 - 核心方法说明：  
-1.  score_answer()  总评分入口
+1.  `score_answer()`  总评分入口
 - 分别计算相关性得分、完整度得分、合规得分
 - 按照配置的权重加权计算总分
 - 同步输出幻觉检测风险等级与说明
 > 加权计分原理：三个维度得分分别乘以对应权重后求和得到总分，权重总和为1。该设计支持业务侧灵活调整评测侧重点，无需修改代码。  
-2.  _calc_relevance_score()  相关性得分
+2.  `_calc_relevance_score()`  相关性得分
 - 计算预期关键词的命中比例，命中越多得分越高
 - 核心逻辑：关键词命中数 / 总关键词数 × 100  
-3.  _calc_completeness_score()  完整度得分
+3.  `_calc_completeness_score()`  完整度得分
 - 综合长度占比与字符重合度两个维度
 - 避免单纯以长度判断完整度的偏差  
-4.  _check_hallucination()  规则版幻觉检测
+4.  _tokenize()  文本分词与过滤方法（静态方法）  
+- 自动识别文本语言类型：中文调用 jieba 分词，英文按空格分词
+- 多层过滤规则：依次剔除`空值`、`单字词`、`停用词`、`纯数字`与`纯标点`
+- 返回去重后的有效实词集合，作为幻觉差集比对的基础单元
+> 配套 frozenset 停用词表与预编译正则过滤，兼顾分词准确率与执行性能
+4.  `_check_hallucination()`  规则版幻觉检测
 - 核心原理：反向比对，找出回答中存在、但标准答案中不存在的词汇，标记为疑似幻觉
 - 使用Python内置 set 集合做差集运算，自动去重提升效率
-- 风险等级划分：无新增词汇=无风险；≤3个新增=低风险；>3个=高风险
-- 配套原理说明： set  是Python内置基础数据类型，核心特性是元素唯一、支持集合运算（交集、差集、并集），是文本去重、比对场景的通用方案，不属于新技术，和列表、字典同属基础语法范畴。
-> 幻觉检测已适配中文场景： 基于jieba分词实现词语级比对，配套通用停用词过滤无意义虚词，大幅降低误判率；  
-英文场景： 保持原空格分词逻辑，自动识别语言类型选择对应策略。  
+- 风险等级划分：风险阈值支持  `eval_rules.yaml`  配置化，分为无/低/中/高四档，默认值兜底：`低风险阈值=3`、`高风险阈值=6`  
+> 中文场景基于 jieba 分词实现词语级比对，配套停用词过滤无意义虚词，大幅降低误判率；  
+英文场景保持原空格分词逻辑，自动识别语言类型选择对应策略。  
 复用来源：关键词匹配逻辑复用断言工具，打分逻辑为基础算术运算
  
 #### 4.2.4 batch_runner.py 批量评测执行器
@@ -152,7 +156,7 @@ code值 含义
 3. 请求成功则执行校验与打分，填充对应字段  
 4. 请求失败则记录错误信息  
 5. 结果存入总列表，返回单条结果
-> 复用来源：80% 复用[项目一](https://github.com/XixiAni/ai_model_eval_framework)  ModelEvalRunner  结构，新增校验打分步骤
+> 复用来源：80% 复用[项目一](https://github.com/XixiAni/ai_model_eval_framework)  `ModelEvalRunner`  结构，新增校验打分步骤
 
 ### 4.3 报告输出层
  
@@ -163,36 +167,36 @@ code值 含义
 1. 自动创建输出目录，不存在则递归生成  
 2. 使用  `utf-8-sig`  编码，Excel打开无中文乱码  
 3. 输出字段可灵活扩展，新增字段仅需修改表头列表
-> 复用来源：90% 复用[项目一](https://github.com/XixiAni/ai_model_eval_framework)  CsvResultExporter ，仅扩展输出字段
+> 复用来源：90% 复用[项目一](https://github.com/XixiAni/ai_model_eval_framework)  `CsvResultExporter` ，仅扩展输出字段
 
 ### 4.4 入口层
  
-#### 4.4.1 main.py 项目主入口
+#### 4.4.1 `main.py` 项目主入口
  
 - 执行顺序：  
 1. 加载.env环境变量，定位项目根目录，不受终端工作目录影响  
 2. 读取全局配置，初始化LLM客户端  
 3. 加载YAML评测用例集，空用例则直接退出  
 4. 初始化批量执行器，执行全部评测任务  
-5. 计算汇总指标：总用例数、成功率、平均分、高幻觉风险数  
+5. 计算汇总指标：总用例数、成功率、耗时、平均分、幻觉风险分布、通过率  
 6. 控制台输出汇总报告，导出CSV结果文件
-> 复用来源：执行链路完全复用[项目一](https://github.com/XixiAni/ai_model_eval_framework)  main.py  设计
+> 复用来源：执行链路完全复用[项目一](https://github.com/XixiAni/ai_model_eval_framework)  ``main.py``  设计
 
 ## 5 完整调用链路与数据流向
  
 ### 5.1 全链路执行流程
   
-1. main.py 加载.env → 读取config.yaml → 初始化 LLMClient
-2. main.py → YamlReader.get_test_data() → 加载 eval_cases.yaml 评测用例  
-3. main.py → 实例化 BatchEvalRunner，注入 LLMClient 实例
-4. BatchEvalRunner.run_batch_cases() 循环执行每条用例：
-   → LLMClient.chat() 发起请求，返回标准化回答
-   → ResponseValidator.validate_all() 执行双维度校验
-   → AnswerScorer.score_answer() 执行打分与幻觉检测
+1. ``main.py`` 加载`.env` → 读取`config.yaml` → 初始化 `LLMClient`
+2. ``main.py`` → `YamlReader.get_test_data()` → 加载 `eval_cases.yaml` 评测用例  
+3. `main.py` → 实例化 `BatchEvalRunner`，注入 `LLMClient` 实例
+4. `BatchEvalRunner.run_batch_cases()` 循环执行每条用例：  
+   → `LLMClient.chat()` 发起请求，返回标准化回答  
+   → `ResponseValidator.validate_all()` 执行双维度校验  
+   → `AnswerScorer.score_answer()` 执行打分与幻觉检测  
    → 生成单条结果字典，加入总结果列表
-5. BatchEvalRunner 返回完整结果列表给 main.py
-6. main.py 计算汇总统计指标，控制台输出
-7. main.py → EvalReporter.export_csv() → 生成CSV评测报告
+5. `BatchEvalRunner` 返回完整结果列表给 `main.py`
+6. `main.py` 计算汇总统计指标，控制台输出
+7. `main.py` → `EvalReporter.export_csv()` → 生成CSV评测报告
  
 ### 5.2 参数传递链路
 
@@ -276,27 +280,27 @@ flowchart LR
 # 安装依赖
 pip install -r requirements.txt
 # 执行全量评测
-python main.py
+python `main.py`
 ```
 
 ## 8 常见问题排查
  
 ### 8.1 提示找不到API密钥
  
-- 确认根目录存在  .env  文件，且配置了  AI_API_KEY 
+- 确认根目录存在  `.env`  文件，且配置了  `AI_API_KEY` 
 - 检查密钥拼写是否正确，前后无多余空格
 - 可尝试配置系统环境变量验证
  
 ### 8.2 YAML文件读取报错
  
--  KeyError ：检查YAML文件中对应层级的字段名是否拼写正确
+-  `KeyError` ：检查YAML文件中对应层级的字段名是否拼写正确
 - 文件找不到：确认config、data目录在项目根目录，文件名与代码中一致
 - 格式错误：检查YAML缩进是否规范，必须使用空格不能用Tab
  
 ### 8.3 CSV报告打开乱码
  
-- 确认使用Excel打开，本框架采用utf-8-sig编码，Excel原生兼容
-- 若使用其他编辑器打开，手动选择UTF-8编码即可
+- 确认使用Excel打开，本框架采用`utf-8-sig`编码，Excel原生兼容
+- 若使用其他编辑器打开，手动选择`UTF-8`编码即可
  
 ### 8.4 日志重复打印两行
  
@@ -307,11 +311,11 @@ python main.py
  
 ### 9.1 目录忽略规范
  
-- 源码目录（ common/ 、 core/ 、 report/ 、 config/ 、 data/ ）必须纳入版本控制
-- 运行产物目录（ 如 logs/ 、 output/ ）、缓存文件、环境变量文件需加入  .gitignore 
+- 源码目录（ `common/` 、 `core/` 、 `report/` 、 `config/` 、 data/ ）必须纳入版本控制
+- 运行产物目录（ 如 `logs/` 、 `output/` ）、缓存文件、环境变量文件需加入  `.gitignore` 
 - 请勿将源码目录加入忽略规则，避免核心代码提交丢失
  
 ### 9.2 注释规范
  
-- 所有公共方法使用 Google 风格 Docstring，包含功能说明、入参、返回值、异常说明
+- 所有公共方法使用 `Google 风格 Docstring`，包含功能说明、入参、返回值、异常说明
 - 代码行内仅保留核心业务逻辑注释，移除科普类、原理说明类冗余注释，统一汇总至文档
