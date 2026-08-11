@@ -1,9 +1,9 @@
 from enum import Enum
 from typing import Tuple
 
-
 class ErrorCode(Enum):
-    """全局统一错误码枚举类，按业务领域分层编码。
+    """
+    全局统一错误码枚举类，按业务领域分层编码。
 
     编码规则：
     
