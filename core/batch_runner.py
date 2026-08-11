@@ -10,8 +10,10 @@ logger = get_logger("batch_runner")
 class BatchEvalRunner:
     """
     批量评测执行器
-    采用依赖注入模式接收LLM客户端，逐条执行用例，单条异常隔离不影响整体任务
-    统一收集所有用例的执行结果，用于后续统计与导出
+
+    采用依赖注入模式接收LLM客户端，逐条执行用例，单条异常隔离，统一收集结果
+    
+    支持拆分统计接口耗时与业务计算耗时，便于性能分析与瓶颈定位
     """
     def __init__(self, llm_client: LLMClient):
         """
@@ -27,6 +29,7 @@ class BatchEvalRunner:
     def run_single_case(self, case_info: Dict[str, Any]) -> Dict[str, Any]:
         """
         执行单条评测用例，完整链路：请求模型 → 有效性校验 → 合规性校验 → 评分与幻觉检测
+
         全链路异常捕获，保证单条用例失败不中断批量任务
         Args:
             case_info: 单条用例字典，包含case_id、case_desc、prompt、expect_keywords、standard_answer等
@@ -40,6 +43,8 @@ class BatchEvalRunner:
             "case_desc": case_info.get("case_desc", "unknown_desc"),
             "prompt": case_info.get("prompt", ""),
             "execute_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "api_cost_ms": 0,
+            "compute_cost_ms": 0,
             "request_cost_ms": 0,
             "answer_content": "",
             "success_flag": False,
@@ -61,8 +66,7 @@ class BatchEvalRunner:
             
             # 1. 调用大模型
             resp = self.llm_client.chat(prompt)
-            cost_ms = round((time.time() - start_time) * 1000, 2)
-            single_result["request_cost_ms"] = cost_ms
+            single_result["request_cost_ms"] = resp.get("cost_ms", 0)
 
             if resp["code"] == 0:
                 single_result["success_flag"] = True
@@ -70,6 +74,7 @@ class BatchEvalRunner:
                 single_result["answer_content"] = answer
 
                 # 2. 执行校验
+                compute_start = time.time()
                 validate_result = self.validator.validate_all(answer)
                 single_result.update(validate_result)
 
@@ -78,6 +83,7 @@ class BatchEvalRunner:
                 std_ans = case_info.get("standard_answer", "")
                 score_result = self.scorer.score_answer(answer, expect_kw, std_ans)
                 single_result.update(score_result)
+                single_result["compute_cost_ms"] = round((time.time() - compute_start) * 1000, 2)
 
             else:
                 single_result["error_msg"] = resp["msg"]
@@ -86,6 +92,7 @@ class BatchEvalRunner:
             single_result["error_msg"] = f"执行异常：{str(e)}"
             logger.error(f"用例 {single_result['case_id']} 运行出错：{str(e)}")
 
+        single_result["request_cost_ms"] = round((time.time() - start_time) * 1000, 2)
         self.eval_result_list.append(single_result)
         return single_result
 

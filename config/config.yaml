@@ -4,6 +4,7 @@ llm:
   model: "deepseek-v4-flash"
   timeout: 30
   max_retry: 1
+  slow_threshold_ms: 1500
 
 # 评测配置
 eval:

@@ -8,11 +8,13 @@ logger = get_logger("reporter")
 class EvalReporter:
     """
     评测报告导出工具
-    当前支持CSV格式导出，自动创建输出目录，编码兼容Excel打开无乱码
+
+    支持CSV格式导出，自动创建输出目录，编码兼容Excel，字段可灵活扩展
     """
     def __init__(self, result_list: List[Dict[str, Any]]):
         """
         初始化报告生成器，接收评测结果列表
+
         Args:
             result_list: 评测结果字典列表
         """
@@ -20,9 +22,10 @@ class EvalReporter:
         self.export_dir = "./output"
         os.makedirs(self.export_dir, exist_ok=True)
 
-    def export_csv(self, filename: str = "eval_report.csv"):
+    def export_csv(self, filename: str = "eval_report.csv") -> str:
         """
         将评测结果导出为CSV文件
+
         Args:
             filename: 导出文件名，默认eval_report.csv
         Returns:
@@ -30,11 +33,12 @@ class EvalReporter:
         """
         file_path = os.path.join(self.export_dir, filename)
         headers = [
-            "case_id", "case_desc", "execute_timestamp", "request_cost_ms",
-            "success_flag", "error_msg", "is_valid", "is_compliant",
-            "validity_msg", "compliance_msg", "total_score", "relevance_score",
-            "completeness_score", "hallucination_level", "hallucination_msg",
-            "answer_content"
+            "case_id", "case_desc", "execute_timestamp",
+            "api_cost_ms", "compute_cost_ms", "request_cost_ms",
+            "success_flag", "error_msg",
+            "is_valid", "is_compliant", "validity_msg", "compliance_msg",
+            "total_score", "relevance_score", "completeness_score",
+            "hallucination_level", "hallucination_msg","answer_content"
         ]
         # 打开文件，w=覆盖写入模式；newline="" 消除CSV多余空行（Windows系统特有bug修复）
         # encoding="utf-8-sig" 核心：兼容Excel打开中文不乱码
