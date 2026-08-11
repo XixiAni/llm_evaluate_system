@@ -3,19 +3,32 @@ from common.logger import get_logger
 from common.yaml_reader import YamlReader
 from common.error_code import ErrorCode
 import re
+
+# 模块级预热：导入时触发词典加载，消除首次调用冷启动开销
+jieba.lcut("")
+
 logger = get_logger("scorer")
 
 # 模块级全局单例：仅初始化一次
 # 中文停用词集合，用于降低基于规则的幻觉检测误判率（使用frozenset不可变集合，提升查找性能、稳定性）
 STOP_WORDS = frozenset({
+    # 基础助词、语气词
     "的", "地", "得", "了", "着", "过", "啊", "吗", "呢", "吧", "嗯", "哦", "噢",
-    "是", "系", "在", "这", "那", "有", "和", "与", "及", "也", "等", "而且",
-    "就", "就是", "都", "都是", "而", "而是", "还", "还要", "还会", "已经",
-    "但", "但是", "可以", "能够", "进行", "通过", "使用", "一个", "一种",
-    "我们", "你们", "他们", "它们", "这个", "那个", "这些", "那些", "因此",
-    "所以", "因为", "由于", "如果", "假如", "虽然", "尽管", "不仅", "还",
-    "并且", "同时", "以及", "等等", "之类", "来说", "而言", "一下", "一点"
+    # 单字系动词、指代、简单连词
+    "是", "系", "在", "这", "那", "有", "和", "与", "也", "等",
+    "就", "都", "而", "还", "还要", "还会",
+    # 逻辑转折、基础动作虚词
+    "但", "可以", "能够", "进行", "通过", "使用", "一个", "一种",
+    # 人称、指代短语
+    "我们", "你们", "他们", "它们", "这个", "那个", "这些", "那些",
+    # 极简因果/假设连词（双字，无歧义）
+    "因此", "所以", "因为", "由于", "如果", "假如", "虽然", "尽管", "不仅",
+    "并且", "同时", "以及", "等等", "之类", "来说", "而言", "一下", "一点",
+    # 程度副词，无专业歧义
+    "很", "非常", "十分", "比较", "相当", "稍微", "几乎", "差不多", "大概", "大约"
 })
+
+
 # 预编译正则：匹配纯数字、纯标点（用于分词过滤）
 _PUNCT_NUM_PATTERN = re.compile(r'^[\d\W_]+$')
 
@@ -24,7 +37,7 @@ class AnswerScorer:
 
     基于关键词匹配、长度重合度、规则差集实现多维度量化打分与幻觉风险识别。
 
-    支持中文分词停用词过滤，阈值与权重可通过配置文件灵活调整。
+    支持中文分词停用词过滤、白名单豁免、数量+占比双维度风险判定，阈值与权重可通过配置文件灵活调整。
     """
     
     def __init__(self):
@@ -44,6 +57,10 @@ class AnswerScorer:
         # 幻觉检测阈值
         self.low_risk_threshold = hallucination_config.get("low_risk_threshold", 3)
         self.high_risk_threshold = hallucination_config.get("high_risk_threshold", 6)
+        self.extra_ratio_threshold = hallucination_config.get("extra_ratio_threshold", 0.3)
+
+        # 读取白名单，转为集合，提升查找性能
+        self.hallucination_whitelist = frozenset(hallucination_config.get("whitelist", []))
 
     def score_answer(self, content: str, expect_keywords: list, standard_answer: str) -> dict:
         """执行多维评分与幻觉检测
@@ -89,7 +106,7 @@ class AnswerScorer:
         }
 
     def _calc_relevance_score(self, content: str, keywords: list) -> float:
-        """计算相关性得分：命中关键词占总关键词的比例
+        """计算相关性得分：基于分词清洗后的实词匹配关键词，命中占比0-100分
 
         Args:
             content: 回答文本
@@ -97,45 +114,56 @@ class AnswerScorer:
         Returns:
             float: 相关性得分，0-100
         """
-        if not content:
+        if not content.strip():
             return 0.0
         # 边界处理：如果没传关键词，直接给满分（无评判标准）
         if not keywords:
             return 100.0
 
+    # 分词清洗，得到回答实词
+        ans_words = self._tokenize(content)
         hit_count = 0
-        # 遍历所有预期关键词，统计命中数量
         for kw in keywords:
-            if kw in content:
+            # 关键词分词清洗，避免虚词干扰匹配
+            kw_words = self._tokenize(kw)
+            if not kw_words:
+                # 关键词分词无有效实词，降级原始字符串匹配兜底
+                if kw in content:
+                    hit_count += 1
+                continue
+            # 关键词所有核心实词全部存在回答中才算命中
+            all_in = all(word in ans_words for word in kw_words) # all(条件 for 变量 in 列表)
+            if all_in:
                 hit_count += 1
         return round(hit_count / len(keywords) * 100, 2)
-
     def _calc_completeness_score(self, content: str, standard: str) -> float:
-        """计算完整度得分：长度占比40% + 字符重合度60%
+        """计算完整度得分：实词数量占比40% + 实词集合重合度60%
 
+        统一使用分词过滤停用词，仅对比承载事实的业务实词，规避虚词干扰
         Args:
             content: 回答文本
             standard: 标准答案文本
         Returns:
             float: 完整度得分，0-100
         """
-        if not content:
+        if not content.strip():
             return 0.0
         # 边界处理：没有标准答案，默认给80分
-        if not standard:
+        if not standard.strip():
+            return 80.0
+
+        std_words = self._tokenize(standard)
+        ans_words = self._tokenize(content)
+
+        if not std_words:
             return 80.0
         
-        # 维度1：长度占比 = 回答长度 / 标准答案长度，最高1.0（超过标准答案长度也按1算）
-        len_ratio = min(len(content) / len(standard), 1.0)
+        # 维度1：实词数量占比，上限1.0
+        len_ratio = min(len(ans_words) / len(std_words), 1.0)
         
-        # 维度2：字符重合度
-        # set(content)：把回答拆成单个字符的集合（去重）
-        # set(standard)：把标准答案拆成单个字符的集合
-        # & ：取交集，也就是两边都有的字符
-        # 重合度 = 共同字符数 / 标准答案总字符数
-        std_chars = set(standard)
-        ans_chars = set(content)
-        common_ratio = len(ans_chars & std_chars) / len(std_chars) if std_chars else 0
+        # 维度2：实词交集重合度（标准答案的实词被覆盖的比例）
+        common_words = ans_words & std_words
+        common_ratio = len(common_words) / len(std_words)
         return round((len_ratio * 0.4 + common_ratio * 0.6) * 100, 2)
 
     @staticmethod
@@ -192,22 +220,29 @@ class AnswerScorer:
         std_words = self._tokenize(standard)   # 标准答案的词集合
         ans_words = self._tokenize(content)    # 模型回答的词集合
         
-        # 差集运算：回答里有、但标准答案里没有的词 → 疑似新增事实
-        extra_words = ans_words - std_words
+        # 差集运算：排除回答中的标准答案词和白名单词 → 疑似新增事实
+        extra_words = ans_words - std_words - self.hallucination_whitelist
         extra_count = len(extra_words)
+        ans_total = len(ans_words)
+        extra_ratio = extra_count / ans_total if ans_total > 0 else 0.0
 
         # 按新增词数量划分风险等级
         if extra_count == 0:
             return {"level": "无", "msg": "未检测到疑似幻觉内容"}
-        
-        elif extra_count <= self.low_risk_threshold:
+
+        # 双维度判定：占比未达标时，直接判定为低风险
+        if extra_ratio < self.extra_ratio_threshold:
             sample = ",".join(list(extra_words)[:3])
-            return {"level": "低", "msg": f"疑似新增事实点：{sample}"}
+            return {"level": "低", "msg": f"疑似新增事实点{extra_count}个（占比{extra_ratio:.1%}）：{sample}"}
+        
+        if extra_count <= self.low_risk_threshold:
+            sample = ",".join(list(extra_words)[:3])
+            return {"level": "低", "msg": f"疑似新增事实点{extra_count}个（占比{extra_ratio:.1%}）：{sample}"}
         
         elif extra_count <= self.high_risk_threshold:
             sample = ",".join(list(extra_words)[:5])
-            return {"level": "中", "msg": f"存在较多未核实内容，疑似幻觉点：{sample}"}
+            return {"level": "中", "msg": f"存在较多未核实内容，共{extra_count}个（占比{extra_ratio:.1%}）：{sample}"}
         
         else:  
             sample = ",".join(list(extra_words)[:5])
-            return {"level": "高", "msg": f"存在大量未核实内容，高幻觉风险，示例: {sample}"}
+            return {"level": "高", "msg": f"存在大量未核实内容，共{extra_count}个（占比{extra_ratio:.1%}），高幻觉风险：{sample}"}
