@@ -9,3 +9,4 @@ llm:
 # 评测配置
 eval:
   output_dir: "./output"
+  concurrent_num: 3 # 最大并发数， 1=串行；参考项目二-n参数设计，配置化灵活调整

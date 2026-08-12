@@ -29,13 +29,16 @@ if __name__ == "__main__":
         print("无可用评测用例，程序退出")
         exit(0)
 
-    # 4. 执行批量评测
-    eval_runner = BatchEvalRunner(llm_client=llm_client)
+    # 4. 初始化批量执行器，读取并发配置
+    concurrent_num = YamlReader.get("config.yaml", "eval.concurrent_num", 1)
+    
+    # 5. 执行批量评测
+    eval_runner = BatchEvalRunner(llm_client=llm_client, concurrent_num=concurrent_num)
     start_time = time.time()
     result_list = eval_runner.run_batch_cases(case_list=case_list)
     total_time = round(time.time() - start_time, 2)
 
-    # 5. 统计汇总指标
+    # 6. 统计汇总指标
     total = len(result_list)
     success_list = [item for item in result_list if item["success_flag"]]
     success = len(success_list)
@@ -60,7 +63,7 @@ if __name__ == "__main__":
     valid_pass = sum(1 for item in success_list if item["is_valid"])
     compliant_pass = sum(1 for item in success_list if item["is_compliant"])
 
-    # 6. 控制台格式化输出
+    # 7. 控制台格式化输出
     # 预处理百分比
     if success > 0:
         pct_hall_none   = f"{hallucination_none / success * 100:.2f}%"
@@ -104,6 +107,6 @@ if __name__ == "__main__":
 
     print("="*60)
 
-    # 6. 导出CSV报告
+    # 8. 导出CSV报告
     reporter = EvalReporter(result_list)
     reporter.export_csv()
