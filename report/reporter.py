@@ -2,6 +2,7 @@ import csv
 import os
 from typing import List, Dict, Any
 from common.logger import get_logger
+from common.yaml_reader import YamlReader
 
 logger = get_logger("reporter")
 
@@ -19,7 +20,8 @@ class EvalReporter:
             result_list: 评测结果字典列表
         """
         self.result_list = result_list
-        self.export_dir = "./output"
+        # 从配置读取输出目录，缺失则使用默认值兜底
+        self.export_dir = YamlReader.get("config.yaml", "eval.output_dir", "./output")
         os.makedirs(self.export_dir, exist_ok=True)
 
     def export_csv(self, filename: str = "eval_report.csv") -> str:
