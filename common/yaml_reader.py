@@ -21,6 +21,7 @@ class YamlReader:
     def set_current_env(cls, env_name: str) -> None:
         """
         设置全局运行环境标识，可适配多环境配置切换
+
         Args:
             env_name: 环境名称，如 dev / test / prod
         """
@@ -29,13 +30,15 @@ class YamlReader:
 
     @classmethod
     def _replace_env_var_recursive(cls, value: Any) -> Any:
-        """递归替换值中的环境变量占位符，支持字符串、字典、列表嵌套结构。
+        """
+        递归替换值中的环境变量占位符，支持字符串、字典、列表嵌套结构。
 
         占位符格式：${变量名}，未匹配到的占位符保持原样返回。
+
         Args:
-             value: 待替换的原始值，支持任意数据类型。
+            value: 待替换的原始值，支持任意数据类型。
         Returns:
-             完成占位符替换后的值，类型与输入一致。
+            完成占位符替换后的值，类型与输入一致。
         """
         if isinstance(value, str):
             pattern = r"\$\{([\w-]+)\}"
@@ -51,23 +54,40 @@ class YamlReader:
             return value
 
     @classmethod
+    def _get_abs_path(cls, sub_dir: str, filename: str) -> str:
+        """
+        通用路径拼接方法：拼接项目根目录下指定子目录的文件绝对路径
+        
+        仅做底层路径计算，不涉及业务语义，供配置、数据读取方法复用
+        
+        Args:
+            sub_dir: 子目录名称，如 config / data
+            filename: 文件名称（含后缀）
+        Returns:
+            str: 文件的完整绝对路径
+        """
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        full_path = os.path.join(base_dir, sub_dir, filename)
+        if sub_dir == "config":
+            logger.debug(f"拼接配置文件完整路径：{full_path}")
+        return full_path
+
+    @classmethod
     def _get_config_path(cls, filename: str) -> str:
         """
         拼接config目录下配置文件的绝对路径
+
         Args:
             filename: 配置文件名称（含后缀）
         Returns:
             str: 配置文件的完整绝对路径
         """
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        full_path = os.path.join(base_dir, "config", filename)
-        logger.debug(f"拼接配置文件完整路径：{full_path}")
-        return full_path
-
+        return cls._get_abs_path("config", filename)
     @classmethod
     def _get_by_dot_path(cls, data: dict, key_path: str, error_prefix: str = "") -> Any:
         """
         通过点分隔的路径从嵌套字典中取值，如 'llm.base_url'
+
         Args:
             data: 原始字典数据
             key_path: 点分隔的嵌套键路径
@@ -85,13 +105,15 @@ class YamlReader:
                 logger.error(err_msg)
                 raise KeyError(err_msg)
             current_node = current_node[key]
-        logger.info(f"配置读取成功：{key_path} = {current_node}")
+        success_prefix = error_prefix.replace("读取失败", "读取成功")
+        logger.info(f"{success_prefix}：{key_path} = {current_node}")
         return current_node
 
     @classmethod
     def read_file(cls, filename: str) -> dict:
         """
         读取config目录下的YAML配置文件，同文件全程仅读取一次，结果存入缓存
+
         Args:
             filename: 配置文件名称（含后缀）
         Returns:
@@ -123,6 +145,7 @@ class YamlReader:
     def get(cls, filename: str, key_path: str, default: Any = None) -> Any:
         """
         读取config目录下配置文件的指定节点值，支持点式路径与默认值兜底
+
         Args:
             filename: 配置文件名称
             key_path: 点分隔的嵌套键路径
@@ -145,6 +168,7 @@ class YamlReader:
     def get_test_data(cls, filename: str, key_path: str = None, default: Any = None) -> Any:
         """
         读取data目录下的评测用例数据文件，支持全量读取或指定节点读取
+        
         Args:
             filename: 测试数据文件名称
             key_path: 可选，点分隔的嵌套键路径，不传则返回全量数据
@@ -155,7 +179,7 @@ class YamlReader:
             FileNotFoundError: 测试数据文件不存在时抛出
             Exception: YAML格式解析失败时抛出
         """
-        file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", filename)
+        file_path = cls._get_abs_path("data",filename)
         logger.info(f"读取测试数据，文件：{filename}，路径：{key_path if key_path else '使用全量数据'}")
         if file_path in cls._cache:
             logger.info(f"匹配到测试数据缓存，直接返回：{file_path}")

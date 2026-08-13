@@ -4,8 +4,8 @@ from common.yaml_reader import YamlReader
 from common.error_code import ErrorCode
 import re
 
-# 模块级预热：导入时触发词典加载，消除首次调用冷启动开销
-jieba.lcut("")
+# 模块级预热：传入非空中文内容，触发词典加载，消除首次调用冷启动开销
+jieba.lcut("分词模块预热")
 
 logger = get_logger("scorer")
 
@@ -28,12 +28,12 @@ STOP_WORDS = frozenset({
     "很", "非常", "十分", "比较", "相当", "稍微", "几乎", "差不多", "大概", "大约"
 })
 
-
 # 预编译正则：匹配纯数字、纯标点（用于分词过滤）
 _PUNCT_NUM_PATTERN = re.compile(r'^[\d\W_]+$')
 
 class AnswerScorer:
-    """大模型回答评分与幻觉检测模块
+    """
+    大模型回答评分与幻觉检测模块
 
     基于关键词匹配、长度重合度、规则差集实现多维度量化打分与幻觉风险识别。
 
@@ -63,7 +63,8 @@ class AnswerScorer:
         self.hallucination_whitelist = frozenset(hallucination_config.get("whitelist", []))
 
     def score_answer(self, content: str, expect_keywords: list, standard_answer: str) -> dict:
-        """执行多维评分与幻觉检测
+        """
+        执行多维评分与幻觉检测
 
         Args:
             content: 大模型回答文本
@@ -106,7 +107,8 @@ class AnswerScorer:
         }
 
     def _calc_relevance_score(self, content: str, keywords: list) -> float:
-        """计算相关性得分：基于分词清洗后的实词匹配关键词，命中占比0-100分
+        """
+        计算相关性得分：基于分词清洗后的实词匹配关键词，命中占比0-100分
 
         Args:
             content: 回答文本
@@ -137,7 +139,8 @@ class AnswerScorer:
                 hit_count += 1
         return round(hit_count / len(keywords) * 100, 2)
     def _calc_completeness_score(self, content: str, standard: str) -> float:
-        """计算完整度得分：实词数量占比40% + 实词集合重合度60%
+        """
+        计算完整度得分：实词数量占比40% + 实词集合重合度60%
 
         统一使用分词过滤停用词，仅对比承载事实的业务实词，规避虚词干扰
         Args:
@@ -168,7 +171,8 @@ class AnswerScorer:
 
     @staticmethod
     def _tokenize(text:str) -> set:
-        """文本分词并过滤无效词，自动识别中英文并选择对应分词策略。
+        """
+        文本分词并过滤无效词，自动识别中英文并选择对应分词策略。
 
         过滤规则： 剔除单字词、停用词、空白字符、纯数字、纯标点等无效词
         
@@ -197,7 +201,8 @@ class AnswerScorer:
         return valid_words
 
     def _check_hallucination(self, content: str, standard: str) -> dict:
-        """基于规则的幻觉检测：比对回答与标准答案的 实词 差集，统计新增词汇
+        """
+        基于规则的幻觉检测：比对回答与标准答案的 实词 差集，统计新增词汇
 
         Args:
             content: 回答文本
@@ -206,10 +211,11 @@ class AnswerScorer:
             dict: 检测结果
                 - level: 风险等级：无/低/中/高/未知
                 - msg: 检测说明
+                - code: 异常场景错误码，仅未知等级携带
         """
         if not content or not content.strip():
             return {"level": "无", "msg": "回答内容为空，无幻觉风险"}
-        # 边界处理：无标准答案，无法检测，标记未知
+        # 边界处理：无标准答案，无法检测，标记未知（业务异常分支，携带错误码）
         if not standard or not standard.strip():
             return {"level": "未知",
                     "msg": ErrorCode.NO_STANDARD_ANSWER.msg,
