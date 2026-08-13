@@ -26,14 +26,19 @@ class BatchEvalRunner:
         """
         初始化批量执行器，注入LLM客户端，实例化校验器与评分器
 
+        并发架构分工：信号量严格限制API请求并发数，线程池管理总线程资源，计算环节不受限流
+
         Args:
             llm_client: 已初始化的大模型客户端实例
-            concurrent_num: 最大并发数，默认1（串行）；大于1时启用线程池并发执行
+            concurrent_num: 最大API请求并发数，默认1（串行）；大于1时启用线程池并发执行
         """
         self.llm_client = llm_client
-        self.concurrent_num = concurrent_num
-        # API请求限流信号量，精准控制同时发起的请求数量（对齐项目二限流思想）
+        self.api_concurrent_num = concurrent_num
+        # API请求限流信号量，精准控制同时发起的请求数量
         self._api_semaphore = threading.Semaphore(concurrent_num)  # 控制API请求并发数
+        # 线程池总大小：API并发数 × 2，保证计算环节可与IO并行，默认不低于4，不高于10
+        self._thread_pool_size = min(max(concurrent_num * 2, 4), 10)
+
         self.validator = ResponseValidator()
         self.scorer = AnswerScorer()
         self.eval_result_list: List[Dict[str, Any]] = []
@@ -52,13 +57,13 @@ class BatchEvalRunner:
         start_time = time.time()
         thread_id = threading.current_thread().name
 
-        # 初始化默认结果字典，异常场景也能保证字段完整（对齐项目二异常隔离规范）
+        # 初始化默认结果字典，异常场景也能保证字段完整
         single_result = {
             "case_id": case_info.get("case_id", "unknown_id"),
             "case_desc": case_info.get("case_desc", "unknown_desc"),
             "prompt": case_info.get("prompt", ""),
             "execute_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "thread_id": thread_id, # 并发排查字段，对其项目二进程标识设计
+            "thread_id": thread_id,
             "api_cost_ms": 0,
             "compute_cost_ms": 0,
             "request_cost_ms": 0,
@@ -83,7 +88,7 @@ class BatchEvalRunner:
             # 信号量限流：超出最大并发数则阻塞等待，保证API请求不超限
             self._api_semaphore.acquire()
             try:
-                # 1. 调用大模型
+                # 1. 调用大模型（仅该环节受限流保护）
                 resp = self.llm_client.chat(prompt)
             finally:
                 # 无论请求是否成功，都释放信号量，避免死锁（对齐项目二资源释放规范）
@@ -121,7 +126,7 @@ class BatchEvalRunner:
         """
         批量执行所有评测用例，清空历史结果后，按并发配置执行
         
-        结果顺序与输入用例顺序完全一致，不影响后续统计与导出（对齐项目二结果汇总规范）
+        结果顺序与输入用例顺序完全一致，不影响后续统计与导出
 
         Args:
             case_list: 评测用例列表
@@ -129,14 +134,14 @@ class BatchEvalRunner:
             list: 所有用例的执行结果列表
         """
         self.eval_result_list.clear()
-        mode_desc = "串行" if self.concurrent_num == 1 else f"并发{self.concurrent_num}线程"
+        mode_desc = "串行" if self.api_concurrent_num == 1 else f"API并发{self.api_concurrent_num}，线程池{self._thread_pool_size}线程"
         print(f"===== 开始批量评测，共加载 {len(case_list)} 条评测用例，执行模式：{mode_desc} =====")
         # 并发数为1时等价串行，直接循环执行，避免线程池额外开销
-        if self.concurrent_num <= 1:
+        if self.api_concurrent_num <= 1:
             self.eval_result_list = [self.run_single_case(case) for case in case_list]
         else:
             # 线程池执行，按提交顺序收集结果，保证顺序与输入一致
-            with ThreadPoolExecutor(max_workers = self.concurrent_num) as executor:
+            with ThreadPoolExecutor(max_workers = self._thread_pool_size) as executor:
                 # 按顺序提交任务，得到future列表与输入一一对应
                 futures = [executor.submit(self.run_single_case, case) for case in case_list]
                 # 按提交顺序逐个取结果，保证结果列表顺序与输入用例完全一致
