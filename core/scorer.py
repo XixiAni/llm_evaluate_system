@@ -10,7 +10,7 @@ jieba.lcut("分词模块预热")
 logger = get_logger("scorer")
 
 # 模块级全局单例：仅初始化一次
-# 中文停用词集合，用于降低基于规则的幻觉检测误判率（使用frozenset不可变集合，提升查找性能、稳定性）
+# 中文停用词集合，用于降低基于规则的幻觉检测误判率
 STOP_WORDS = frozenset({
     # 基础助词、语气词
     "的", "地", "得", "了", "着", "过", "啊", "吗", "呢", "吧", "嗯", "哦", "噢",
@@ -28,7 +28,7 @@ STOP_WORDS = frozenset({
     "很", "非常", "十分", "比较", "相当", "稍微", "几乎", "差不多", "大概", "大约"
 })
 
-# 预编译正则：匹配纯数字、纯标点（用于分词过滤）
+# 预编译正则：匹配纯数字、纯标点
 _PUNCT_NUM_PATTERN = re.compile(r'^[\d\W_]+$')
 
 class AnswerScorer:
@@ -134,7 +134,7 @@ class AnswerScorer:
                     hit_count += 1
                 continue
             # 关键词所有核心实词全部存在回答中才算命中
-            all_in = all(word in ans_words for word in kw_words) # all(条件 for 变量 in 列表)
+            all_in = all(word in ans_words for word in kw_words)
             if all_in:
                 hit_count += 1
         return round(hit_count / len(keywords) * 100, 2)
@@ -164,7 +164,7 @@ class AnswerScorer:
         # 维度1：实词数量占比，上限1.0
         len_ratio = min(len(ans_words) / len(std_words), 1.0)
         
-        # 维度2：实词交集重合度（标准答案的实词被覆盖的比例）
+        # 维度2：实词交集重合度
         common_words = ans_words & std_words
         common_ratio = len(common_words) / len(std_words)
         return round((len_ratio * 0.4 + common_ratio * 0.6) * 100, 2)
@@ -218,8 +218,8 @@ class AnswerScorer:
         # 边界处理：无标准答案，无法检测，标记未知（业务异常分支，携带错误码）
         if not standard or not standard.strip():
             return {"level": "未知",
-                    "msg": ErrorCode.NO_STANDARD_ANSWER.msg,
-                    "code": ErrorCode.NO_STANDARD_ANSWER.code
+                    "code": ErrorCode.NO_STANDARD_ANSWER.code,
+                    "msg": ErrorCode.NO_STANDARD_ANSWER.msg
                 }
         
         # 按空格分词，转成集合（去重）
@@ -252,3 +252,6 @@ class AnswerScorer:
         else:  
             sample = ",".join(list(extra_words)[:5])
             return {"level": "高", "msg": f"存在大量未核实内容，共{extra_count}个（占比{extra_ratio:.1%}），高幻觉风险：{sample}"}
+
+# 模块级单例：全局唯一实例，全程仅初始化一次
+answer_scorer = AnswerScorer()

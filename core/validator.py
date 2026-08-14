@@ -122,7 +122,7 @@ class ResponseValidator:
                 "pass": False,
                 "msg": f"{ErrorCode.VALID_HIGH_REPEAT.msg}：短语「{hit_phrase}」连续重复{max_repeat_times}次，超过阈值：{self.max_continuous_repeat}次"
             }
-        return {"pass": True, "msg": ""}
+        return {"pass": True, "msg": "重复率校验通过"}
 
     def _validate_compliance(self, content: str) -> dict:
         """
@@ -146,3 +146,6 @@ class ResponseValidator:
                     "msg": f"{ErrorCode.COMPLIANCE_SENSITIVE_WORD.msg}：{','.join(hit_words)}"
                 }
         return {"pass": True, "msg": "合规性校验通过"}
+
+# 模块级单例：全局唯一实例，全程仅初始化一次
+response_validator = ResponseValidator()

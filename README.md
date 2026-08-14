@@ -1,5 +1,5 @@
 # AI大模型自动化评测系统
-> 最后更新时间：2026年8月 | 版本：v0.1.6
+> 最后更新时间：2026年8月 | 版本：v0.1.7
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -76,7 +76,8 @@ python main.py
 │   ├── llm_client.py   # 大模型请求客户端，统一封装接口调用
 │   ├── batch_runner.py # 批量评测执行器，负责任务调度与结果收集
 │   ├── validator.py    # 响应校验模块：有效性+合规性双校验
-│   └── scorer.py       # 智能评分模块：多维打分 + 幻觉检测
+│   ├── scorer.py       # 智能评分模块：多维打分 + 幻觉检测
+│   └── statistics.py   # 评测结果统计与汇总输出工具
 ├── data/               # 评测数据层：YAML格式存储评测用例
 │   └── eval_cases.yaml # 评测用例集
 ├── report/             # 报告输出层

@@ -4,8 +4,8 @@ from typing import List, Dict, Any
 from concurrent.futures import ThreadPoolExecutor
 from common.logger import get_logger
 from core.llm_client import LLMClient
-from core.validator import ResponseValidator
-from core.scorer import AnswerScorer
+from core.validator import response_validator
+from core.scorer import answer_scorer
 
 logger = get_logger("batch_runner")
 
@@ -19,12 +19,12 @@ class BatchEvalRunner:
     
     支持拆分统计接口耗时与业务计算耗时，便于性能分析与瓶颈定位
     
-    设计思想沿用项目二并发规范：配置化参数、全异常隔离、顺序结果保证
+    校验器、评分器复用模块级单例，避免重复初始化开销
     """
 
     def __init__(self, llm_client: LLMClient, concurrent_num: int = 1):
         """
-        初始化批量执行器，注入LLM客户端，实例化校验器与评分器
+        初始化批量执行器，注入LLM客户端，复用全局单例校验器与评分器
 
         并发架构分工：信号量严格限制API请求并发数，线程池管理总线程资源，计算环节不受限流
 
@@ -39,8 +39,9 @@ class BatchEvalRunner:
         # 线程池总大小：API并发数 × 2，保证计算环节可与IO并行，默认不低于4，不高于10
         self._thread_pool_size = min(max(concurrent_num * 2, 4), 10)
 
-        self.validator = ResponseValidator()
-        self.scorer = AnswerScorer()
+        # 复用全局模块级单例，无状态工具类全程仅初始化一次
+        self.validator = response_validator
+        self.scorer = answer_scorer
         self.eval_result_list: List[Dict[str, Any]] = []
 
     def run_single_case(self, case_info: Dict[str, Any]) -> Dict[str, Any]:
@@ -91,7 +92,7 @@ class BatchEvalRunner:
                 # 1. 调用大模型（仅该环节受限流保护）
                 resp = self.llm_client.chat(prompt)
             finally:
-                # 无论请求是否成功，都释放信号量，避免死锁（对齐项目二资源释放规范）
+                # 无论请求是否成功，都释放信号量，避免死锁
                 self._api_semaphore.release()
             single_result["api_cost_ms"] = resp.get("cost_ms", 0)
 

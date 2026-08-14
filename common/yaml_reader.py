@@ -105,8 +105,9 @@ class YamlReader:
                 logger.error(err_msg)
                 raise KeyError(err_msg)
             current_node = current_node[key]
-        success_prefix = error_prefix.replace("读取失败", "读取成功")
-        logger.info(f"{success_prefix}：{key_path} = {current_node}")
+            
+        success_prefix = error_prefix.replace("读取失败：", "读取成功：")
+        logger.info(f"{success_prefix}{key_path} = {current_node}")
         return current_node
 
     @classmethod

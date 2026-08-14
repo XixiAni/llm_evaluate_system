@@ -27,6 +27,7 @@ class ErrorCode(Enum):
     NETWORK_CONNECT_ERROR = (2002, "网络连接失败")
     HTTP_ERROR = (2003, "接口返回HTTP错误状态码")
     RESPONSE_PARSE_ERROR = (2004, "响应内容解析失败")
+    NETWORK_UNKNOWN_ERROR = (2005, "未知网络异常")
 
     # 内容校验类 3xxx
     VALID_EMPTY_CONTENT = (3001, "回答内容为空")
