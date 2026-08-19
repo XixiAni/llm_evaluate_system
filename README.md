@@ -1,5 +1,5 @@
 # AI大模型自动化评测系统
-> 最后更新时间：2026年8月 | 版本：v0.1.8
+> 最后更新时间：2026年8月 | 版本：v0.1.10
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -60,7 +60,7 @@ python main.py
 
 - 控制台输出：实时执行日志 + 评测指标汇总报告
 - CSV报告： `./output/eval_report_时间戳.csv`（默认自动追加时间戳，支持自定义文件名，Excel直接打开）
-- 全链路日志： `./logs/`  目录按日期拆分
+- 全链路日志： `./logs/` 目录按日期独立存储，同一天多次运行自动追加
 - SQLite数据库：  ./output/eval_result.db （支持历史数据查询、多版本对比）
  
 ## 📁 项目目录结构
@@ -86,6 +86,8 @@ python main.py
 │   └── reporter.py     # CSV评测报告导出工具
 ├── logs/               # 运行日志输出目录（自动生成）
 ├── output/             # 评测报告输出目录（自动生成）
+├── docs/               # 文档与示例目录
+│   └── examples/       # 扩展实现参考示例，不参与业务运行
 ├── main.py             # 项目唯一入口
 ├── requirements.txt    # 项目依赖清单
 └── README.md           # 项目说明文档
