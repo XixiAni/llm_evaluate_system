@@ -59,7 +59,7 @@ python main.py
 ### 4. 查看结果
 
 - 控制台输出：实时执行日志 + 评测指标汇总报告
-- CSV报告： `./output/eval_report.csv` （Excel直接打开）
+- CSV报告： `./output/eval_report_时间戳.csv`（默认自动追加时间戳，支持自定义文件名，Excel直接打开）
 - 全链路日志： `./logs/`  目录按日期拆分
 - SQLite数据库：  ./output/eval_result.db （支持历史数据查询、多版本对比）
  

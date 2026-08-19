@@ -221,6 +221,7 @@ pip install -r requirements.txt
 1. 自动创建输出目录，不存在则递归生成  
 2. 使用  `utf-8-sig`  编码，Excel打开无中文乱码  
 3. 输出字段可灵活扩展，新增字段仅需修改表头列表
+4. 默认文件名自动追加时间戳，避免多次执行覆盖历史报告；同时，保留自定义文件名入参，向前兼容
 > 复用来源：90% 复用[项目一](https://github.com/XixiAni/ai_model_eval_framework)  `CsvResultExporter` ，仅扩展输出字段
 
 ### 4.4 入口层
