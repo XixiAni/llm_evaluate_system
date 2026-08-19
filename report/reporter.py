@@ -1,5 +1,6 @@
 import csv
 import os
+from datetime import datetime
 from typing import List, Dict, Any
 from common.logger import get_logger
 from common.yaml_reader import YamlReader
@@ -11,6 +12,8 @@ class EvalReporter:
     评测报告导出工具
 
     支持CSV格式导出，自动创建输出目录，编码兼容Excel，字段可灵活扩展
+
+    默认文件名自动追加时间戳，多次执行不覆盖历史报告
     """
     def __init__(self, result_list: List[Dict[str, Any]]):
         """
@@ -24,15 +27,19 @@ class EvalReporter:
         self.export_dir = YamlReader.get("config.yaml", "eval.output_dir", "./output")
         os.makedirs(self.export_dir, exist_ok=True)
 
-    def export_csv(self, filename: str = "eval_report.csv") -> str:
+    def export_csv(self, filename: str = None) -> str:
         """
         将评测结果导出为CSV文件
 
         Args:
-            filename: 导出文件名，默认eval_report.csv
+            filename: 导出文件名，不传则自动生成带时间戳的默认文件名：eval_report_{时间戳}.csv
         Returns:
             str: 导出文件的完整路径
         """
+        # 未指定文件名时，自动追加时间戳，避免多次执行覆盖
+        if filename is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"eval_report_{timestamp}.csv"
         file_path = os.path.join(self.export_dir, filename)
         headers = [
             "case_id", "case_desc", "execute_timestamp",
