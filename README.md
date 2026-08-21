@@ -1,5 +1,5 @@
 # AI大模型自动化评测系统
-> 最后更新时间：2026年8月 | 版本：v0.1.10
+> 最后更新时间：2026年8月 | 版本：v0.1.11
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -16,6 +16,7 @@
 - 📈 **丰富统计维度**：自动输出成功率、分项平均分、幻觉风险分布、校验通过率、耗时统计多维度汇总
 - 🛡️ **高容错执行**：单用例异常隔离，网络波动自动重试，异常分类统一出口，批量任务不中断
 - 💾 **轻量持久化存储**：基于Python标准库SQLite零依赖实现评测结果持久化，批次+明细一对多设计，支持历史数据回溯与多版本模型效果横向对比
+- 🛠️ **配套命令行工具**：内置数据库管理脚本，无需编写代码即可查询历史批次、查看用例详情、清理测试数据，运维管理成本低
 - 📝 **企业级规范**：密钥脱敏、日志埋点、环境变量管理、全局统一错误码，符合安全开发标准
 - ♻️ **成熟基底复用**：核心组件复用双项目验证的成熟代码，稳定性有保障
 
@@ -61,7 +62,23 @@ python main.py
 - 控制台输出：实时执行日志 + 评测指标汇总报告
 - CSV报告： `./output/eval_report_时间戳.csv`（默认自动追加时间戳，支持自定义文件名，Excel直接打开）
 - 全链路日志： `./logs/` 目录按日期独立存储，同一天多次运行自动追加
-- SQLite数据库：  ./output/eval_result.db （支持历史数据查询、多版本对比）
+- SQLite数据库：  `./output/eval_result.db` （支持历史数据查询、多版本对比）
+  - 命令行查询：通过 `tools/db_manager.py` 快速检索历史批次与用例明细，无需打开数据库文件
+
+### 5. 管理历史评测数据
+```bash
+# 查看最近10条评测批次
+python tools/db_manager.py list --limit 10
+
+# 查看单批次汇总详情
+python tools/db_manager.py detail --batch_id batch_xxx
+
+# 查看批次下所有用例明细
+python tools/db_manager.py cases --batch_id batch_xxx
+
+# 删除指定批次（级联删除所有用例明细）
+python tools/db_manager.py delete --batch_id batch_xxx
+```
  
 ## 📁 项目目录结构
  
@@ -88,6 +105,8 @@ python main.py
 ├── output/             # 评测报告输出目录（自动生成）
 ├── docs/               # 文档与示例目录
 │   └── examples/       # 扩展实现参考示例，不参与业务运行
+├── tools/              # 配套工具层：辅助管理脚本
+│   └── db_manager.py   # 数据库管理命令行工具
 ├── main.py             # 项目唯一入口
 ├── requirements.txt    # 项目依赖清单
 └── README.md           # 项目说明文档

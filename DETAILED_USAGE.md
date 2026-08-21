@@ -1,5 +1,5 @@
 # AI大模型自动化评测系统 详细使用手册
-> 最后更新时间：2026年8月 | 版本：v0.1.10
+> 最后更新时间：2026年8月 | 版本：v0.1.11
 
 ## 1 工具简介
 本系统是面向AI测试开发的大模型质量专项评测工具，聚焦大模型输出内容的质量评估，覆盖批量问答、有效性校验、合规检测、幻觉识别、量化打分全流程，采用数据驱动设计，评测用例与代码完全解耦，可用于大模型版本回归测试、效果基线对比、内容安全专项评测等场景。
@@ -100,6 +100,14 @@ pip install -r requirements.txt
 - 核心方法：
   - `save_batch_result()`：保存整批评测结果，写入批次主表+全量用例明细，返回批次ID
   - `query_batch_list()`：查询历史批次列表，按执行时间倒序排列
+  - `query_batch_by_id()`：根据批次ID查询单条批次汇总信息
+  - `query_case_details_by_batch_id()`：查询指定批次下的全部用例明细
+  - `delete_batch_by_id()`：手动级联删除指定批次，事务保证原子性，删除操作不可撤销
+> 级联删除设计：采用手动级联方案而非数据库原生 `ON DELETE CASCADE`，优势在于：  
+  1. 兼容已有的历史数据库文件，无需修改表结构
+  2. 删除逻辑完全可控，可灵活增加日志埋点、二次确认、权限校验
+  3. 风险范围可控，误操作主表不会自动清空明细数据，降低批量数据丢失风险
+> 事务保证：所有写操作均包裹在 `with conn` 上下文管理器中，利用SQLite事务机制保证原子性——操作全部成功则统一提交，任意一步异常则完整回滚，绝不会产生半完成的脏数据。
 
 ### 4.2 核心业务层
  
@@ -252,10 +260,22 @@ pip install -r requirements.txt
 6. 导出CSV结果文件
 > 复用来源：执行链路完全复用[项目一](https://github.com/XixiAni/ai_model_eval_framework)  ``main.py``  设计
 
+### 4.5 配套工具层
+#### 4.5.1 db_manager.py 数据库管理工具
+- 定位：外围辅助工具，不参与核心评测流程，用于快速管理本地历史评测数据
+- 核心能力：
+  1. 批次列表查询：按执行时间倒序展示历史批次，支持自定义返回条数
+  2. 单批次详情：展示批次全部汇总字段
+  3. 用例明细概览：快速预览批次内所有用例的执行状态、得分、幻觉等级
+  4. 批次级联删除：带二次确认防护，删除主表同时清理对应明细数据
+- 设计原则：仅依赖common层标准接口，不直接操作数据库，与业务代码复用同一套持久化逻辑
+- 调用方式：通过终端命令执行，无需编写Python代码
+
 ## 5 完整调用链路与数据流向
  
 ### 5.1 全链路执行流程
   
+- 核心评测流程:  
 1. ``main.py`` 加载`.env` → 读取`config.yaml` → 初始化 `LLMClient`
 2. ``main.py`` → `YamlReader.get_test_data()` → 加载 `eval_cases.yaml` 评测用例  
 3. `main.py` → 实例化 `BatchEvalRunner`，注入 `LLMClient` 实例
@@ -267,7 +287,9 @@ pip install -r requirements.txt
 5. `BatchEvalRunner` 返回完整结果列表给 `main.py`
 6. `main.py` 计算汇总统计指标，控制台输出
 7. `main.py` → `EvalDbClient.save_batch_result()` → 评测结果持久化到SQLite数据库，存储批次汇总与全量明细
-8. `main.py` → `EvalReporter.export_csv()` → 生成CSV评测报告
+8. `main.py` → `EvalReporter.export_csv()` → 生成CSV评测报告  
+
+- 外围工具链路：`tools/db_manager.py` → `EvalDbClient` → 读取/修改SQLite数据库，实现历史数据管理
 
  
 ### 5.2 参数传递链路

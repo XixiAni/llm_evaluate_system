@@ -2,6 +2,19 @@
 所有版本变更记录在此文件中，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/) 规范。
 
+## [v0.1.11] - 2026-08-21
+### Added
+- 新增 `query_batch_by_id()`、`query_case_details_by_batch_id()`、`delete_batch_by_id()` 三个接口，SQLite持久化模块从仅支持写入升级为「可写可查可管理」完整CRUD能力
+- 新增 `tools/db_manager.py` 命令行数据库管理工具，支持历史批次列表查询、单批次汇总查看、批次用例明细概览、批次级联删除四类操作，无需编写业务代码即可管理历史数据
+- 新增 `docs/examples/sqlite_client_usage_example.py` 调用示例，演示持久化客户端核心接口的代码调用方式，作为学习参考
+
+### Changed
+- 优化持久化模块职责边界，所有数据库操作统一收口至 `EvalDbClient`，上层业务与工具层均通过标准接口调用
+
+### Known Issues
+- 命令行管理工具运行时，INFO级业务日志与控制台展示内容混杂，输出整洁度待优化
+- 每次执行数据库操作都会输出表结构初始化日志，语义存在冗余，易造成误解
+
 ## [v0.1.10] - 2026-08-19
 ### Changed
 - 优化日志模块实现，采用轻量 FileHandler 方案，按程序启动日期生成日志文件，同一天多次运行自动追加，适配短周期批量评测脚本场景
