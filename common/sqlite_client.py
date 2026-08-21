@@ -1,17 +1,16 @@
 import sqlite3
 import uuid
 import time
-from typing import List, Dict, Any
+from typing import List, Dict, Any,Optional
 from common.logger import get_logger
 
 logger = get_logger("sqlite_client")
-
 
 class EvalDbClient:
     """
     SQLite 评测结果持久化客户端
 
-    封装数据库初始化、批次结果落库、历史查询能力，屏蔽底层SQL细节
+    封装数据库初始化、批次结果落库、历史查询、批次删除能力，屏蔽底层SQL细节
 
     全链路异常兜底，写入失败不阻断主业务流程
     """
@@ -160,9 +159,9 @@ class EvalDbClient:
                 cursor.executemany("""
                     INSERT INTO eval_case_detail
                     (batch_id, case_id, case_desc, prompt, execute_timestamp, thread_id,
-                     api_cost_ms, compute_cost_ms, request_cost_ms, answer_content,
-                     success_flag, error_msg, is_valid, is_compliant, validity_msg, compliance_msg,
-                     total_score, relevance_score, completeness_score, hallucination_level, hallucination_msg)
+                    api_cost_ms, compute_cost_ms, request_cost_ms, answer_content,
+                    success_flag, error_msg, is_valid, is_compliant, validity_msg, compliance_msg,
+                    total_score, relevance_score, completeness_score, hallucination_level, hallucination_msg)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, detail_rows)
 
@@ -197,3 +196,76 @@ class EvalDbClient:
         except Exception as e:
             logger.error(f"查询批次列表失败：{str(e)}", exc_info=True)
             return []
+
+    def query_batch_by_id(self, batch_id: str) -> Optional[Dict[str, Any]]:
+        """
+        根据批次ID查询单条批次汇总信息
+        
+        Args:
+            batch_id: 批次唯一ID
+        Returns:
+            dict: 批次汇总信息字典；批次不存在或查询失败返回None
+        """
+        try:
+            with self._get_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT * FROM eval_batch
+                    WHERE batch_id = ?
+                    LIMIT 1
+                """, (batch_id,))
+                row = cursor.fetchone()
+                return dict(row) if row else None
+        except Exception as e:
+            logger.error(f"查询批次详情失败，batch_id={batch_id}：{str(e)}", exc_info=True)
+            return None
+    def query_case_details_by_batch_id(self, batch_id: str) -> List[Dict[str, Any]]:
+        """
+        查询指定批次下的所有用例明细
+    
+        Args:
+            batch_id: 批次唯一ID
+        Returns:
+            list: 用例明细字典列表，空批次或查询失败返回空列表
+        """
+        try:
+            with self._get_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT * FROM eval_case_detail
+                    WHERE batch_id = ?
+                    ORDER BY id ASC
+                """, (batch_id,))
+                rows = cursor.fetchall()
+                return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"查询批次明细失败，batch_id={batch_id}：{str(e)}", exc_info=True)
+            return []
+    def delete_batch_by_id(self, batch_id: str) -> bool:
+        """
+        级联删除指定批次：先删除明细表记录，再删除主表记录，事务保证原子性
+    
+        Args:
+            batch_id: 批次唯一ID
+        Returns:
+            bool: 删除成功返回True，失败返回False
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                # 先删明细表，再删主表，保证数据一致性
+                cursor.execute("DELETE FROM eval_case_detail WHERE batch_id = ?", (batch_id,))
+                cursor.execute("DELETE FROM eval_batch WHERE batch_id = ?", (batch_id,))
+                conn.commit()
+                affected_rows = cursor.rowcount
+                if affected_rows > 0:
+                    logger.info(f"批次 {batch_id} 已成功删除")
+                    return True
+                else:
+                    logger.warning(f"批次 {batch_id} 不存在，无数据被删除")
+                    return False
+        except Exception as e:
+            logger.error(f"删除批次失败，batch_id={batch_id}：{str(e)}", exc_info=True)
+            return False
