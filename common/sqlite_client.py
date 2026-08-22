@@ -38,57 +38,66 @@ class EvalDbClient:
         """
         初始化数据表，表不存在时自动创建
 
+        仅首次创建输出INFO日志，表已存在时静默，避免语义冗余
+
         包含两张表：批次主表 eval_batch、用例明细表 eval_case_detail
         """
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
+            # 前置查询：判断主表是否已存在，精准控制日志输出
+            # 两张表绑定创建，主表存在则明细表必然存在，无需二次查询
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='eval_batch'")
+                table_exists = cursor.fetchone() is not None
+                if not table_exists:
+                    # 批次主表：记录每次批量执行的整体信息
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS eval_batch (
+                            batch_id TEXT PRIMARY KEY,
+                            execute_time TEXT NOT NULL,
+                            model_name TEXT,
+                            total_cases INTEGER,
+                            success_count INTEGER,
+                            total_time REAL,
+                            success_rate REAL,
+                            avg_total_score REAL
+                        )
+                    """)
 
-                # 批次主表：记录每次批量执行的整体信息
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS eval_batch (
-                        batch_id TEXT PRIMARY KEY,
-                        execute_time TEXT NOT NULL,
-                        model_name TEXT,
-                        total_cases INTEGER,
-                        success_count INTEGER,
-                        total_time REAL,
-                        success_rate REAL,
-                        avg_total_score REAL
-                    )
-                """)
+                    # 用例明细表：记录单条用例完整评测结果
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS eval_case_detail (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            batch_id TEXT NOT NULL,
+                            case_id TEXT,
+                            case_desc TEXT,
+                            prompt TEXT,
+                            execute_timestamp TEXT,
+                            thread_id TEXT,
+                            api_cost_ms REAL,
+                            compute_cost_ms REAL,
+                            request_cost_ms REAL,
+                            answer_content TEXT,
+                            success_flag INTEGER,
+                            error_msg TEXT,
+                            is_valid INTEGER,
+                            is_compliant INTEGER,
+                            validity_msg TEXT,
+                            compliance_msg TEXT,
+                            total_score REAL,
+                            relevance_score REAL,
+                            completeness_score REAL,
+                            hallucination_level TEXT,
+                            hallucination_msg TEXT,
+                            FOREIGN KEY (batch_id) REFERENCES eval_batch(batch_id)
+                        )
+                    """)
 
-                # 用例明细表：记录单条用例完整评测结果
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS eval_case_detail (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        batch_id TEXT NOT NULL,
-                        case_id TEXT,
-                        case_desc TEXT,
-                        prompt TEXT,
-                        execute_timestamp TEXT,
-                        thread_id TEXT,
-                        api_cost_ms REAL,
-                        compute_cost_ms REAL,
-                        request_cost_ms REAL,
-                        answer_content TEXT,
-                        success_flag INTEGER,
-                        error_msg TEXT,
-                        is_valid INTEGER,
-                        is_compliant INTEGER,
-                        validity_msg TEXT,
-                        compliance_msg TEXT,
-                        total_score REAL,
-                        relevance_score REAL,
-                        completeness_score REAL,
-                        hallucination_level TEXT,
-                        hallucination_msg TEXT,
-                        FOREIGN KEY (batch_id) REFERENCES eval_batch(batch_id)
-                    )
-                """)
-
-                conn.commit()
-                logger.info("数据库表结构初始化完成")
+                    conn.commit()
+                    logger.info("数据库表结构初始化完成")
+                else:
+                    # 表已存在，仅输出DEBUG日志，INFO级别下不可见
+                    logger.debug("数据库表结构已存在，跳过创建")
         except Exception as e:
             logger.error(f"数据库表初始化失败：{str(e)}", exc_info=True)
 
