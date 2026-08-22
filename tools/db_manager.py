@@ -20,6 +20,14 @@ sys.path.insert(0, BASE_DIR)
 from common.sqlite_client import EvalDbClient
 from common.yaml_reader import YamlReader
 
+# 命令行交互场景优化：控制台仅输出WARNING及以上级别日志
+# 避免底层INFO日志干扰业务表格展示，文件日志保持INFO级别不变
+import logging
+_root_logger = logging.getLogger()
+for _handler in _root_logger.handlers:
+    # 匹配控制台处理器，排除文件处理器
+    if isinstance(_handler, logging.StreamHandler) and not isinstance(_handler, logging.FileHandler):
+        _handler.setLevel(logging.WARNING)
 
 def init_client() -> EvalDbClient:
     """初始化数据库客户端，读取配置中的db路径"""
