@@ -2,6 +2,15 @@
 所有版本变更记录在此文件中，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/) 规范。
 
+## [v0.1.12] - 2026-08-22
+### Changed
+- 优化数据库初始化日志策略，仅首次创建表时输出INFO级提示，表已存在时静默，消除「每次都重建表」的语义误解
+- 优化命令行数据库管理工具的控制台输出，日志级别降级为WARNING，避免底层INFO日志干扰业务表格展示，文件日志保持完整不变
+
+### Fixed
+- 修复命令行工具运行时日志混杂、输出整洁度不足的体验问题
+- 修复数据库初始化日志语义冗余、易造成误解的问题
+
 ## [v0.1.11] - 2026-08-21
 ### Added
 - 新增 `query_batch_by_id()`、`query_case_details_by_batch_id()`、`delete_batch_by_id()` 三个接口，SQLite持久化模块从仅支持写入升级为「可写可查可管理」完整CRUD能力
