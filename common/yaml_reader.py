@@ -61,28 +61,35 @@ class YamlReader:
         仅做底层路径计算，不涉及业务语义，供配置、数据读取方法复用
         
         Args:
-            sub_dir: 子目录名称，如 config / data
+            sub_dir: 子目录名称，如 config / data / prompts
             filename: 文件名称（含后缀）
         Returns:
             str: 文件的完整绝对路径
         """
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         full_path = os.path.join(base_dir, sub_dir, filename)
-        if sub_dir == "config":
+        # 配置类目录打印debug日志，辅助排查
+        if sub_dir in ("config","prompts"):
             logger.debug(f"拼接配置文件完整路径：{full_path}")
         return full_path
 
     @classmethod
-    def _get_config_path(cls, filename: str) -> str:
+    def _get_path(cls, filename: str, sub_dir: str = "config") -> str:
         """
-        拼接config目录下配置文件的绝对路径
+        通用配置文件路径拼接，默认读取config目录
 
         Args:
             filename: 配置文件名称（含后缀）
+            通用配置文件路径拼接，默认读取config目录
         Returns:
             str: 配置文件的完整绝对路径
         """
-        return cls._get_abs_path("config", filename)
+        return cls._get_abs_path(sub_dir, filename)
+
+    @classmethod
+    def _get_config_path(cls, filename: str) -> str:
+        """兼容旧调用：拼接config目录下配置文件的绝对路径"""
+        return cls._get_path(filename, sub_dir="config")
     @classmethod
     def _get_by_dot_path(cls, data: dict, key_path: str, error_prefix: str = "") -> Any:
         """
@@ -111,19 +118,20 @@ class YamlReader:
         return current_node
 
     @classmethod
-    def read_file(cls, filename: str) -> dict:
+    def read_file(cls, filename: str, sub_dir: str = "config") -> dict:
         """
-        读取config目录下的YAML配置文件，同文件全程仅读取一次，结果存入缓存
+        读取指定目录下的YAML配置文件，同文件全程仅读取一次，结果存入缓存
 
         Args:
             filename: 配置文件名称（含后缀）
+            sub_dir: 子目录名称，默认config，支持传入prompts等其他目录
         Returns:
             dict: 解析后的YAML配置字典,已完成全量环境变量占位符替换
         Raises:
             FileNotFoundError: 配置文件不存在时抛出
             Exception: YAML格式解析失败时抛出
         """
-        file_path = cls._get_config_path(filename)
+        file_path = cls._get_path(filename, sub_dir=sub_dir)
         if file_path in cls._cache:
             logger.info(f"匹配到配置缓存，直接返回：{file_path}")
             return cls._cache[file_path]
@@ -143,14 +151,15 @@ class YamlReader:
             raise
 
     @classmethod
-    def get(cls, filename: str, key_path: str, default: Any = None) -> Any:
+    def get(cls, filename: str, key_path: str, default: Any = None, sub_dir: str = "config") -> Any:
         """
-        读取config目录下配置文件的指定节点值，支持点式路径与默认值兜底
+        读取指定目录下配置文件的指定节点值，支持点式路径与默认值兜底
 
         Args:
             filename: 配置文件名称
             key_path: 点分隔的嵌套键路径
             default: 默认值，当键读取失败时返回
+            sub_dir: 子目录名称，默认config
         Returns:
             Any: 配置节点对应的值,读取失败则返回default
         Raises:
@@ -159,7 +168,7 @@ class YamlReader:
         """
         logger.info(f"读取配置节点，文件：{filename}，路径：{key_path}")
         try:
-            data = cls.read_file(filename)
+            data = cls.read_file(filename, sub_dir=sub_dir)
             return cls._get_by_dot_path(data, key_path, error_prefix="配置读取失败：")
         except KeyError:
             logger.warning(f"配置节点不存在，返回默认值：{default}")
