@@ -1,5 +1,5 @@
 # AI大模型自动化评测系统 详细使用手册
-> 最后更新时间：2026年8月 | 版本：v0.1.12
+> 最后更新时间：2026年8月 | 版本：v0.1.13
 
 ## 1 工具简介
 本系统是面向AI测试开发的大模型质量专项评测工具，聚焦大模型输出内容的质量评估，覆盖批量问答、有效性校验、合规检测、幻觉识别、量化打分全流程，采用数据驱动设计，评测用例与代码完全解耦，可用于大模型版本回归测试、效果基线对比、内容安全专项评测等场景。
@@ -80,6 +80,7 @@ pip install -r requirements.txt
 7. 新增递归式环境变量占位符替换，支持字符串、嵌套字典、列表全层级自动替换  
 8. `get` 、 `get_test_data` 方法新增 default 默认值参数，配置节点缺失时自动降级，不抛出异常
 9. 底层路径拼接逻辑重构：抽取通用绝对路径计算方法，消除配置、数据读取场景的重复代码，同时保持两类读取方法的业务职责完全分离
+10. 支持多目录读取：通过 `sub_dir` 参数可自定义读取目录（如 config/prompts），默认 config，向后完全兼容
 > 复用来源：[项目二](https://github.com/XixiAni/playwright_ui_po_autotest_framework) 100% 完整复用，所有能力完整保留  
 
 #### 4.1.3 error_code 全局错误码
@@ -211,6 +212,13 @@ pip install -r requirements.txt
     - 死锁防护：API请求用`try-finally`强制包裹信号量释放，无论请求成功、失败、抛异常，都保证释放许可，杜绝死锁  
     - 顺序保证：按输入用例顺序提交任务，主线程按提交顺序收集Future结果，最终结果列表与输入用例顺序严格一一对应，不破坏后续统计、导出逻辑
   5. 执行流程：请求模型 → 有效性校验 → 合规性校验 → 打分与幻觉检测 → 返回单条结果
+  6. Judge-LLM 可插拔自校验
+    - 设计原则：可选开启，默认关闭，完全不影响原生规则版链路
+    - 执行时机：规则版幻觉检测完成后，若开启评判且有标准答案，则调用大模型二次校验
+    - 降级机制：网络异常、响应解析失败均自动降级，保留规则版结果，不影响主流程
+    - 并发控制：与主模型请求共享同一信号量，统一限制API总并发数，避免触发频率限制
+    - 等级对齐：大模型返回的数字等级映射为项目统一的字符串等级，下游统计、落库、导出零改造
+
 - 单条用例执行时序：  
   1. 初始化默认结果字典，异常场景也能正常存入  
   2. 调用LLM客户端获取回答  
@@ -282,14 +290,29 @@ pip install -r requirements.txt
 2. ``main.py`` → `YamlReader.get_test_data()` → 加载 `eval_cases.yaml` 评测用例  
 3. `main.py` → 实例化 `BatchEvalRunner`，注入 `LLMClient` 实例
 4. `BatchEvalRunner.run_batch_cases()` 循环执行每条用例：  
-   → `LLMClient.chat()` 发起请求，返回标准化回答  
-   → `ResponseValidator.validate_all()` 执行双维度校验  
-   → `AnswerScorer.score_answer()` 执行打分与幻觉检测  
-   → 生成单条结果字典，加入总结果列表
+  → `LLMClient.chat()` 发起请求，返回标准化回答  
+  → `ResponseValidator.validate_all()` 执行双维度校验  
+  → `AnswerScorer.score_answer()` 执行打分与幻觉检测  
+  → 生成单条结果字典，加入总结果列表
+  → 若开启 Judge-LLM 且存在标准答案：调用评判大模型二次校验幻觉
+  → 解析成功则覆盖幻觉等级与说明；解析失败则保留规则版结果，输出降级警告
 5. `BatchEvalRunner` 返回完整结果列表给 `main.py`
 6. `main.py` 计算汇总统计指标，控制台输出
 7. `main.py` → `EvalDbClient.save_batch_result()` → 评测结果持久化到SQLite数据库，存储批次汇总与全量明细
 8. `main.py` → `EvalReporter.export_csv()` → 生成CSV评测报告  
+```mermaid
+flowchart LR
+    A[请求模型] --> B[有效性+合规性校验]
+    B --> C[规则版打分与幻觉检测]
+    C --> D{是否开启Judge-LLM}
+    D -->|否| E[输出最终结果]
+    D -->|是| F[调用评判大模型]
+    F --> G{JSON解析是否成功}
+    G -->|成功| H[覆盖幻觉检测结果]
+    G -->|失败| I[降级保留规则版结果+告警]
+    H --> E
+    I --> E
+```
 
 - 外围工具链路：`tools/db_manager.py` → `EvalDbClient` → 读取/修改SQLite数据库，实现历史数据管理
 
