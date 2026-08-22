@@ -11,3 +11,11 @@ eval:
   output_dir: "./output"
   concurrent_num: 3 # 最大并发数， 1=串行；参考项目二-n参数设计，配置化灵活调整
   db_path: "./output/eval_result.db"  # 新增：SQLite数据库文件路径
+
+# 
+judge_llm:
+  enable: True # 默认关闭，按需开启
+  model: "deepseek-v4-flash"
+  base_url: "https://api.deepseek.com" # 可与主模型同地址，也可单独配置
+  timeout: 60
+  max_retry: 2
