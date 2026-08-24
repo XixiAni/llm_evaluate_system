@@ -91,7 +91,7 @@ class EvalDbClient:
                             hallucination_msg TEXT,
                             judge_llm_status TEXT DEFAULT 'disabled',
                             judge_llm_err TEXT,
-                            FOREIGN KEY (batch_id) REFERENCES eval_batch(batch_id) ??? 这里为什么要删除
+                            FOREIGN KEY (batch_id) REFERENCES eval_batch(batch_id)
                         )
                     """)
 
@@ -102,7 +102,7 @@ class EvalDbClient:
                     # 表已存在，执行字段平滑迁移，重复执行无副作用
                     self._migrate_table_columns(cursor)
                     conn.commit()
-                    logger.debug("数据库表结构已存在，跳过创建,字段迁移完成")
+                    logger.debug("数据库表结构已存在，跳过创建，字段迁移完成")
 
         except Exception as e:
             logger.error(f"数据库表初始化失败：{str(e)}", exc_info=True)
@@ -111,17 +111,24 @@ class EvalDbClient:
         """
         表结构字段迁移：追加新字段，兼容旧版本数据库文件
 
+        采用「先查询表结构+条件追加」方案，适配SQLite语法限制，保证幂等执行
+
         Args:
             cursor: 数据库游标对象
         """
-        # 新增 Judge-LLM 调用状态字段
-        cursor.execute("""
-            ALTER TABLE eval_case_detail ADD COLUMN IF NOT EXISTS judge_llm_status TEXT DEFAULT 'disabled'
-        """)
-        # 新增 Judge-LLM 错误信息字段
-        cursor.execute("""
-            ALTER TABLE eval_case_detail ADD COLUMN IF NOT EXISTS judge_llm_err TEXT
-        """)
+        # 查询当前表所有已存在的列名，存入集合用于O(1)判断
+        cursor.execute("PRAGMA table_info(eval_case_detail)")
+        exist_columns = {column[1] for column in cursor.fetchall()}
+        # 待迁移字段配置：(字段名, 完整追加SQL)
+        # 后续新增字段只需在此列表追加配置，无需重复写判断逻辑
+        migrate_columns = [
+            ("judge_llm_status", "ALTER TABLE eval_case_detail ADD COLUMN judge_llm_status TEXT DEFAULT 'disabled'"),
+            ("judge_llm_err", "ALTER TABLE eval_case_detail ADD COLUMN judge_llm_err TEXT")
+        ]
+        # 仅当字段不存在时执行追加
+        for col_name, add_sql in migrate_columns:
+            if col_name not in exist_columns:
+                cursor.execute(add_sql)
 
     def save_batch_result(self, result_list: List[Dict[str, Any]], summary: Dict[str, Any], model_name: str = "unknown") -> str:
         """
