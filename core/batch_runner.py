@@ -62,7 +62,7 @@ class BatchEvalRunner:
         """
         执行单条评测用例，完整链路：请求模型 → 有效性校验 → 合规性校验 → 评分与幻觉检测
 
-        可选执行Judge-LLM语义级幻觉校验，失败自动降级为规则版结果
+        可选执行Judge-LLM语义级幻觉校验，解析或接口失败自动降级为规则版结果
 
         全链路异常捕获，保证单条用例失败不中断批量任务
 
@@ -95,7 +95,9 @@ class BatchEvalRunner:
             "relevance_score": 0,
             "completeness_score": 0,
             "hallucination_level": "",
-            "hallucination_msg": ""
+            "hallucination_msg": "",
+            "judge_llm_status": "disabled",
+            "judge_llm_err": None
         }
 
         try:
@@ -114,13 +116,30 @@ class BatchEvalRunner:
                 # 1. 调用大模型（仅该环节受限流保护）
                 resp = self.llm_client.chat(prompt)
 
-                # 2. 调用评判大模型（配置开启且有标准答案时执行，同享限流保护）
-                if self.judge_llm_client and std_ans.strip():
-                    judge_prompt = self._judge_user_template.format(
+                # 2. 调用评判大模型：仅当主模型调用成功、且配置开启、且有标准答案时才执行（同享限流保护）
+                # 主模型失败时无有效回答，跳过评判避免无效Token消耗
+                if resp["code"] == 0 and self.judge_llm_client and std_ans.strip():
+                    single_result["judge_llm_status"] = "success"
+                    judge_user_prompt = self._judge_user_template.format(
                         standard_answer=std_ans,
                         answer_content=resp.get("data", "")
                     )
-                    judge_resp = self.judge_llm_client.chat(judge_prompt)
+                    try:
+                        judge_resp = self.judge_llm_client.chat(
+                                prompt=judge_user_prompt,
+                                system_prompt=self._judge_system_prompt
+                            )
+                    except Exception as e:
+                        # 接口层异常：api_failed标记，网络超时、连接失败等；降级规则结果
+                        single_result["judge_llm_status"] = "api_failed"
+                        single_result["judge_llm_err"] = str(e)
+                        logger.warning(f"用例 {single_result['case_id']} Judge-LLM接口调用失败，降级使用规则版：{str(e)}")
+                    else:
+                        # 调用无异常，但返回业务错误码，也标记为api_failed
+                        if judge_resp["code"] != 0:
+                            single_result["judge_llm_status"] = "api_failed"
+                            single_result["judge_llm_err"] = judge_resp["msg"]
+                            logger.warning(f"用例 {single_result['case_id']} Judge-LLM接口返回错误，降级使用规则版：{judge_resp['msg']}")
             finally:
                 # 无论请求是否成功，都释放信号量，避免死锁
                 self._api_semaphore.release()
@@ -141,8 +160,9 @@ class BatchEvalRunner:
                 score_result = self.scorer.score_answer(answer, expect_kw, std_ans)
                 single_result.update(score_result)
 
-                # 3.3 Judge-LLM 语义级幻觉校验（成功则覆盖规则版结果，失败自动降级）
+                # 3.3 Judge-LLM 语义级幻觉校验（接口成功时 解析，成功则覆盖规则版结果，失败自动降级）
                 if judge_resp and judge_resp["code"] == 0:
+                    # 接口返回成功，尝试解析JSON
                     try:
                         judge_data = json.loads(judge_resp["data"])
                         level_num = judge_data.get("level", -1)
@@ -151,11 +171,15 @@ class BatchEvalRunner:
                             single_result["hallucination_msg"] = judge_data.get("reason", "LLM评判完成")
                             logger.debug(f"用例 {single_result['case_id']} Judge-LLM评判完成，等级：{self._level_map[level_num]}")
                     except Exception as e:
-                        logger.warning(f"用例 {single_result['case_id']} Judge-LLM结果解析失败，降级使用规则版：{str(e)}")
+                        # 解析失败：parse_failed标记，JSON解析失败；保留规则版结果
+                        single_result["judge_llm_status"] = "parse_failed"
+                        single_result["judge_llm_err"] = f"JSON解析失败：{str(e)}"
+                        logger.warning(f"用例 {single_result['case_id']} Judge-LLM结果解析失败，保留规则版结果：{str(e)}")
 
                 single_result["compute_cost_ms"] = round((time.time() - compute_start) * 1000, 2)
 
             else:
+                # 主模型失败不修改Judge-LLM状态，保持disabled或原有状态
                 single_result["error_msg"] = resp["msg"]
 
         except Exception as e:

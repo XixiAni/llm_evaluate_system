@@ -142,6 +142,7 @@ class LLMClient:
 # ============= 所有重试耗尽 / 不重试异常 统一处理 =============
         cost = round((time.time() - start_time) * 1000, 2)
         ret_data  = None
+
         if isinstance(last_exception, Timeout):
             err = ErrorCode.NETWORK_TIMEOUT
             err_code = err.code
@@ -155,7 +156,6 @@ class LLMClient:
             err_code = err.code
             err_msg = f"{err.msg}：{str(last_exception)}"
             ret_data = resp.text if resp is not None else None
-
         elif isinstance(last_exception, RequestException):
             err = ErrorCode.NETWORK_UNKNOWN_ERROR
             err_code = err.code
@@ -175,21 +175,29 @@ class LLMClient:
                 "cost_ms": cost
             }
         
-    def chat(self, prompt: str, model: str = None) -> dict:
+    def chat(self, prompt: str, model: str = None, system_prompt: str = None) -> dict:
         """
-        快捷对话方法：封装标准对话接口调用，直接返回回答文本
+        快捷对话方法：封装标准对话接口调用，支持system角色，直接返回回答文本
 
         Args:
             prompt: 用户提问内容
             model: 指定调用模型名称，不传则读取环境变量 LLM_MODEL 作为默认模型
+            system_prompt: 可选，系统提示词，传入则添加system角色消息
         Returns:
             dict: 统一结果结构体，成功时 data 字段存储模型回答文本
         """
         api_path = "/v1/chat/completions"
         use_model = model if model else os.getenv("LLM_MODEL", "deepseek-v4-flash")
+
+        # 组装消息列表：支持system+user双角色，向后兼容单user模式
+        messages = []
+        if system_prompt and system_prompt.strip():
+            messages.append({"role": "system", "content": system_prompt.strip()})
+        messages.append({"role": "user", "content": prompt})
+
         request_body = {
             "model": use_model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
             "temperature": 0.7
         }
         resp = self.send_post(api_path, request_body)
