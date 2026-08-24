@@ -17,7 +17,7 @@ class EvalDbClient:
 
     def __init__(self, db_path: str = "./output/eval_result.db"):
         """
-        初始化数据库客户端，自动完成表结构创建
+        初始化数据库客户端，自动完成表结构创建与字段迁移
 
         Args:
             db_path: SQLite 数据库文件路径，文件不存在时自动创建
@@ -36,7 +36,7 @@ class EvalDbClient:
 
     def _init_tables(self) -> None:
         """
-        初始化数据表，表不存在时自动创建
+        初始化数据表，表不存在时自动创建；自动执行字段迁移，兼容历史数据库文件
 
         仅首次创建输出INFO日志，表已存在时静默，避免语义冗余
 
@@ -89,17 +89,39 @@ class EvalDbClient:
                             completeness_score REAL,
                             hallucination_level TEXT,
                             hallucination_msg TEXT,
-                            FOREIGN KEY (batch_id) REFERENCES eval_batch(batch_id)
+                            judge_llm_status TEXT DEFAULT 'disabled',
+                            judge_llm_err TEXT,
+                            FOREIGN KEY (batch_id) REFERENCES eval_batch(batch_id) ??? 这里为什么要删除
                         )
                     """)
 
                     conn.commit()
                     logger.info("数据库表结构初始化完成")
+
                 else:
-                    # 表已存在，仅输出DEBUG日志，INFO级别下不可见
-                    logger.debug("数据库表结构已存在，跳过创建")
+                    # 表已存在，执行字段平滑迁移，重复执行无副作用
+                    self._migrate_table_columns(cursor)
+                    conn.commit()
+                    logger.debug("数据库表结构已存在，跳过创建,字段迁移完成")
+
         except Exception as e:
             logger.error(f"数据库表初始化失败：{str(e)}", exc_info=True)
+
+    def _migrate_table_columns(self, cursor: sqlite3.Cursor) -> None:
+        """
+        表结构字段迁移：追加新字段，兼容旧版本数据库文件
+
+        Args:
+            cursor: 数据库游标对象
+        """
+        # 新增 Judge-LLM 调用状态字段
+        cursor.execute("""
+            ALTER TABLE eval_case_detail ADD COLUMN IF NOT EXISTS judge_llm_status TEXT DEFAULT 'disabled'
+        """)
+        # 新增 Judge-LLM 错误信息字段
+        cursor.execute("""
+            ALTER TABLE eval_case_detail ADD COLUMN IF NOT EXISTS judge_llm_err TEXT
+        """)
 
     def save_batch_result(self, result_list: List[Dict[str, Any]], summary: Dict[str, Any], model_name: str = "unknown") -> str:
         """
@@ -162,7 +184,9 @@ class EvalDbClient:
                         item.get("relevance_score", 0),
                         item.get("completeness_score", 0),
                         item.get("hallucination_level", ""),
-                        item.get("hallucination_msg", "")
+                        item.get("hallucination_msg", ""),
+                        item.get("judge_llm_status", "disabled"),
+                        item.get("judge_llm_err", "")
                     ))
 
                 cursor.executemany("""
@@ -170,8 +194,9 @@ class EvalDbClient:
                     (batch_id, case_id, case_desc, prompt, execute_timestamp, thread_id,
                     api_cost_ms, compute_cost_ms, request_cost_ms, answer_content,
                     success_flag, error_msg, is_valid, is_compliant, validity_msg, compliance_msg,
-                    total_score, relevance_score, completeness_score, hallucination_level, hallucination_msg)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    total_score, relevance_score, completeness_score, hallucination_level, hallucination_msg,
+                    judge_llm_status, judge_llm_err)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, detail_rows)
 
                 conn.commit()
