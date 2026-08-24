@@ -2,6 +2,15 @@
 所有版本变更记录在此文件中，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/) 规范。
 
+## [v0.1.15] - 2026-08-24
+### Fixed
+- 修复 SQLite 自动迁移语句语法兼容性问题，采用 PRAGMA 元数据查询方案实现幂等字段追加，旧版本数据库可无缝平滑升级
+- 优化迁移字段配置化管理，后续新增字段无需重复编写判断逻辑，维护成本降低
+
+### Known Issues
+- 短文本标准答案场景下，规则版幻觉检测误判率较高的固有问题仍存在
+- 单元测试用例未覆盖全量分支
+
 ## [v0.1.14] - 2026-08-24
 ### Added
 - 新增 Judge-LLM 调用状态与错误信息同步落库，四档追踪机制（disabled/success/api_failed/parse_failed），便于事后排查与数据分析

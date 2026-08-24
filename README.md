@@ -1,5 +1,5 @@
 # AI大模型自动化评测系统
-> 最后更新时间：2026年8月 | 版本：v0.1.14
+> 最后更新时间：2026年8月 | 版本：v0.1.15
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
