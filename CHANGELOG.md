@@ -2,6 +2,24 @@
 所有版本变更记录在此文件中，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/) 规范。
 
+## [v0.1.14] - 2026-08-24
+### Added
+- 新增 Judge-LLM 调用状态与错误信息同步落库，四档追踪机制（disabled/success/api_failed/parse_failed），便于事后排查与数据分析
+- 新增 SQLite 表结构自动迁移机制，历史数据库文件无需手动升级，字段追加平滑无感知
+- 新增 CSV 报告导出 Judge-LLM 状态与错误字段，数据全链路一致
+- 新增 LLMClient 支持 system_prompt 系统角色，提升提示词约束能力
+
+### Fixed
+- 修复 Judge-LLM system_prompt 未接入请求的缺陷，提示词格式约束能力正式生效
+- 优化 Judge-LLM 提示词约束强度，新增多重格式禁令，大幅降低 JSON 解析失败率
+- 优化 Judge-LLM 异常分层捕获，区分接口调用异常与结果解析异常，降级逻辑更精准
+- 优化 Judge-LLM 调用时机，主模型失败时跳过评判，避免无效Token消耗
+
+### Known Issues
+- SQLite 自动迁移语句存在语法兼容性问题，旧版本数据库文件会写入失败，不影响主评测流程与CSV导出，后续版本修复
+- 短文本标准答案场景下，规则版幻觉检测误判率较高的固有问题仍存在
+- 单元测试用例未覆盖全量分支
+
 ## [v0.1.13] - 2026-08-22
 ### Added
 - 新增 Judge-LLM 可插拔大模型自校验能力，支持规则+LLM双重幻觉检测，解析失败自动降级规则版，不中断评测流程
