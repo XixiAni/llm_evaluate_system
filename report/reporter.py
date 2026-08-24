@@ -47,7 +47,9 @@ class EvalReporter:
             "success_flag", "error_msg",
             "is_valid", "is_compliant", "validity_msg", "compliance_msg",
             "total_score", "relevance_score", "completeness_score",
-            "hallucination_level", "hallucination_msg","answer_content"
+            "hallucination_level", "hallucination_msg",
+            "judge_llm_status", "judge_llm_err",
+            "answer_content"
         ]
         # 打开文件，w=覆盖写入模式；newline="" 消除CSV多余空行（Windows系统特有bug修复）
         # encoding="utf-8-sig" 核心：兼容Excel打开中文不乱码
