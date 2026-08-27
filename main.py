@@ -42,11 +42,12 @@ if __name__ == "__main__":
         print("无可用评测用例，程序退出")
         exit(0)
 
-    # 3. 初始化批量执行器
+    # 3. 初始化批量执行器，传入并发数、自定义线程池大小
     eval_runner = BatchEvalRunner(
         llm_client=llm_client,
         concurrent_num=app_config.eval_concurrent_num,
-        judge_llm_client=judge_llm_client
+        judge_llm_client=judge_llm_client,
+        thread_pool_size=app_config.eval_thread_pool_size
     )
 
     # 4. 执行批量评测
