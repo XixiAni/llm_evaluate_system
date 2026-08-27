@@ -14,19 +14,21 @@ logger = get_logger("batch_runner")
 class BatchEvalRunner:
     """
     批量评测执行器
-    
+
     采用依赖注入模式接收LLM客户端，支持串行/并发两种执行模式
-    
+
     单条异常隔离，统一收集结果，内置API请求限流保护
-    
+
     支持拆分统计接口耗时与业务计算耗时，便于性能分析与瓶颈定位
 
     可选接入Judge-LLM大模型自校验，实现规则+LLM双重幻觉检测
 
     校验器、评分器复用模块级单例，避免重复初始化开销
+
+    优化点：支持自定义线程池大小、Judge-LLM独立耗时统计
     """
 
-    def __init__(self, llm_client: LLMClient, concurrent_num: int = 1, judge_llm_client: Optional[LLMClient] = None):
+    def __init__(self, llm_client: LLMClient, concurrent_num: int = 1, judge_llm_client: Optional[LLMClient] = None, thread_pool_size: int = None):
         """
         初始化批量执行器，注入LLM客户端，复用全局单例校验器与评分器
 
@@ -36,14 +38,20 @@ class BatchEvalRunner:
             llm_client: 已初始化的主评测大模型客户端实例
             concurrent_num: 最大API请求并发数，默认1（串行）；大于1时启用线程池并发执行
             judge_llm_client: 可选，已初始化的评判大模型客户端实例，传入则启用LLM自校验幻觉检测
+            thread_pool_size: 可选，自定义线程池总大小；不传则自动计算（并发数×2，4~10区间）
         """
         self.llm_client = llm_client
         self.judge_llm_client = judge_llm_client
         self.api_concurrent_num = concurrent_num
         # API请求限流信号量，精准控制同时发起的请求数量
         self._api_semaphore = threading.Semaphore(concurrent_num)  # 控制API请求并发数
-        # 线程池总大小：API并发数 × 2，保证计算环节可与IO并行，默认不低于4，不高于10
-        self._thread_pool_size = min(max(concurrent_num * 2, 4), 10)
+
+        # 线程池大小：优先使用传入配置，否则自动计算
+        if thread_pool_size and thread_pool_size > 0:
+            self._thread_pool_size = thread_pool_size
+        else:
+            # 自动计算：API并发数 × 2，保证计算环节可与IO并行，默认不低于4，不高于10
+            self._thread_pool_size = min(max(concurrent_num * 2, 4), 10)
 
         # 复用全局模块级单例，无状态工具类全程仅初始化一次
         self.validator = response_validator
@@ -82,6 +90,7 @@ class BatchEvalRunner:
             "execute_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "thread_id": thread_id,
             "api_cost_ms": 0,
+            "judge_api_cost_ms": 0,
             "compute_cost_ms": 0,
             "request_cost_ms": 0,
             "answer_content": "",
@@ -114,16 +123,26 @@ class BatchEvalRunner:
             self._api_semaphore.acquire()
             try:
                 # 1. 调用大模型（仅该环节受限流保护）
-                resp = self.llm_client.chat(prompt)
+                # 预设默认值，兜底所有异常路径
+                resp = None
+                try:
+                    resp = self.llm_client.chat(prompt)
+                finally:
+                    # 无论调用成功/抛出异常，都保证字段有值
+                    single_result["api_cost_ms"] = resp.get("cost_ms", 0) if resp else 0
 
                 # 2. 调用评判大模型：仅当主模型调用成功、且配置开启、且有标准答案时才执行（同享限流保护）
                 # 主模型失败时无有效回答，跳过评判避免无效Token消耗
                 if resp["code"] == 0 and self.judge_llm_client and std_ans.strip():
-                    single_result["judge_llm_status"] = "success"
                     judge_user_prompt = self._judge_user_template.format(
                         standard_answer=std_ans,
                         answer_content=resp.get("data", "")
                     )
+
+                    # 计时起点紧接调用前，简单逻辑无异常风险
+                    judge_start = time.time()
+                    judge_resp = None
+
                     try:
                         judge_resp = self.judge_llm_client.chat(
                                 prompt=judge_user_prompt,
@@ -140,10 +159,15 @@ class BatchEvalRunner:
                             single_result["judge_llm_status"] = "api_failed"
                             single_result["judge_llm_err"] = judge_resp["msg"]
                             logger.warning(f"用例 {single_result['case_id']} Judge-LLM接口返回错误，降级使用规则版：{judge_resp['msg']}")
+                        else:
+                            # 接口+业务双成功，标记为success
+                            single_result["judge_llm_status"] = "success"
+                    finally:
+                        # 无论调用成功/异常/业务错误，都保证耗时统计必写入
+                        single_result["judge_api_cost_ms"] = round((time.time() - judge_start) * 1000, 2)
             finally:
                 # 无论请求是否成功，都释放信号量，避免死锁
                 self._api_semaphore.release()
-            single_result["api_cost_ms"] = resp.get("cost_ms", 0)
 
             # ========== 第三步：本地计算与校验 ==========
             if resp["code"] == 0:
