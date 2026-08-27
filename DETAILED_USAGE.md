@@ -60,6 +60,11 @@ pip install -r requirements.txt
   2. Windows平台文件被占用时归档IO操作会失败，仅输出警告不阻断主程序
   3. 代码复杂度更高，心智负担更大，本项目默认不启用
 
+##### 配置化分级能力
+- 支持通过 `config.yaml` 独立设置文件日志、控制台日志的输出级别，可选：debug/info/warning/error/critical
+- 采用「默认初始化 + 后置配置」模式，避免循环依赖：日志先按默认 INFO 级别启动，配置加载完成后动态调整级别
+- 总日志器级别设为 DEBUG 下限，由各 handler 独立控制输出粒度，保证后续可动态上调级别不丢失信息
+
 ##### 切换实现说明
 所有业务模块统一依赖 `from common.logger import get_logger` 接口，日志底层实现全部封装在 `common/logger.py` 内部。
 **替换不同的日志处理器方案，上层所有业务代码无需修改任何 import 与调用逻辑，仅替换 logger.py 内部实现即可。**
@@ -99,6 +104,11 @@ pip install -r requirements.txt
   4. **事务安全**：使用`with`上下文管理器管理连接，正常执行自动提交，异常自动回滚，避免半完成脏数据
   5. **全链路容错**：所有数据库操作包裹异常捕获，写入失败仅记录错误日志，不中断主评测流程
   6. **自动迁移机制**：版本迭代新增字段时，自动执行幂等迁移，无需手动删库，历史数据完整保留；采用「PRAGMA元数据查询+条件追加」的原生语法方案，完全兼容SQLite语法规范，支持所有历史版本数据库无缝升级。
+  7. **连接级性能与完整性优化**：
+    - 每次连接自动开启 `foreign_keys = ON`，真正生效外键约束，防止出现孤儿明细数据，作为手动级联删除的兜底保障
+    - 每次连接自动开启 `journal_mode = WAL` 写前日志模式，写入性能提升数倍，读写不阻塞，适配批量评测高并发写入场景
+    - 对高频查询字段建立索引：`eval_batch.execute_time`（排序）、`eval_case_detail.batch_id`（关联查询）、`eval_case_detail.hallucination_level`（筛选统计），查询效率大幅提升
+
 - 核心方法：
   - `save_batch_result()`：保存整批评测结果，写入批次主表+全量用例明细，返回批次ID
   - `query_batch_list()`：查询历史批次列表，按执行时间倒序排列
@@ -121,6 +131,7 @@ pip install -r requirements.txt
   3. **错误聚合输出**：一次性收集所有配置问题，统一打印后终止程序，减少用户反复排查成本
   4. **默认值兜底**：所有非核心配置均提供合理默认值，配置文件缺失字段也能保证程序正常运行
 - 调用方式：`from common.config_loader import app_config` 直接导入全局实例，通过属性访问配置项
+> 新增日志级别配置、线程池大小配置，未传入时默认值兜底
 
 ### 4.2 核心业务层
  
@@ -213,6 +224,7 @@ pip install -r requirements.txt
 - 核心设计：  
   1. 依赖注入：接收外部初始化好的LLM客户端实例，不自行创建，实现解耦  
   2. 异常隔离：单条用例全链路异常全部捕获，记录错误信息，不中断批量任务；异常场景也返回字段完整的标准化结果，避免后续统计、导出报错  
+    - 防御式计时设计：每个API调用独立配套 try-finally，耗时赋值放在 finally 块中，不依赖下层模块的异常兜底承诺，无论调用成功/异常/崩溃，计数字段必有值
   3. 标准化结果结构：无论成功失败，均生成统一格式的结果字典，方便后续统计导出  
   4. 并发调度架构：
     - 限流保护：通过`threading.Semaphore`信号量精准控制同时发起的API请求数量，仅限制接口请求环节，本地校验、打分等计算逻辑不受限，兼顾限流与执行效率
@@ -239,6 +251,7 @@ pip install -r requirements.txt
   5. 结果存入总列表，返回单条结果
 - 耗时字段拆分：
   - `api_cost_ms`：大模型接口纯网络往返耗时，来自LLM客户端内部统计
+  - `judge_api_cost_ms`：Judge-LLM 评判模型接口纯网络往返耗时，独立统计
   - `compute_cost_ms`：本地校验、打分、幻觉检测业务计算耗时
   - `request_cost_ms`：单条用例全链路总耗时（接口等待 + 本地计算 + 线程调度开销）
   - `thread_id`：执行线程标识，并发场景下用于问题排查与链路追溯
@@ -434,6 +447,7 @@ flowchart LR
 | execute_timestamp   | TEXT    | 单条用例执行时间                       |
 | thread_id           | TEXT    | 执行线程标识                           |
 | api_cost_ms         | REAL    | 纯接口耗时（毫秒）                     |
+| judge_api_cost_ms   | REAL    | Judge-LLM评判模型纯接口耗时（毫秒）    |
 | compute_cost_ms     | REAL    | 业务计算耗时（毫秒）                   |
 | request_cost_ms     | REAL    | 全链路总耗时（毫秒）                   |
 | answer_content      | TEXT    | 模型回答内容                           |
