@@ -1,5 +1,5 @@
 import sys
-from common.logger import get_logger
+from common.logger import get_logger, setup_log_level
 from common.yaml_reader import YamlReader
 
 logger = get_logger("config_loader")
@@ -11,12 +11,16 @@ class ConfigLoader:
     集中管理所有框架配置的读取、默认值填充、合法性校验，遵循fail-fast原则
 
     配置错误直接终止程序，聚合所有问题一次性输出
+
+    优化点：新增日志级别配置、线程池大小配置
     """
 
     def __init__(self):
         """初始化并加载全量配置，执行合法性校验"""
         self._load_all_config()
         self._validate_config()
+        # 配置校验通过后，设置日志级别
+        setup_log_level(self.log_file_level, self.log_console_level)
         logger.info("全量配置加载与校验完成")
 
     def _load_all_config(self) -> None:
@@ -26,8 +30,9 @@ class ConfigLoader:
 
         # or，防御yaml中节点为null的场景
         llm_config = config.get("llm") or {}
-        judge_config = config.get("judge_llm"), {}
-        eval_config = config.get("eval"), {}
+        judge_config = config.get("judge_llm") or {}
+        eval_config = config.get("eval") or {}
+        log_config = config.get("log") or {}
 
         # 主模型配置
         self.llm_base_url = llm_config.get("base_url", "")
@@ -46,6 +51,11 @@ class ConfigLoader:
         self.eval_concurrent_num = eval_config.get("concurrent_num", 1)
         self.eval_db_path = eval_config.get("db_path", "./output/eval_result.db")
         self.eval_output_dir = eval_config.get("output_dir", "./output")
+        self.eval_thread_pool_size = eval_config.get("thread_pool_size", None)
+
+        # 日志配置
+        self.log_file_level = log_config.get("file_level", "info")
+        self.log_console_level = log_config.get("console_level", "info")
 
     def _validate_config(self) -> None:
         """集中校验所有配置合法性，聚合错误后统一输出"""
@@ -63,6 +73,18 @@ class ConfigLoader:
 
         if not isinstance(self.eval_concurrent_num, int) or self.eval_concurrent_num <= 0:
             errors.append(f"配置项 eval.concurrent_num 必须为正整数，当前值：{self.eval_concurrent_num}")
+
+        if self.eval_thread_pool_size is not None and (not isinstance(self.eval_thread_pool_size, int) or self.eval_thread_pool_size <= 0):
+            errors.append(f"配置项 eval.thread_pool_size 必须为正整数，当前值：{self.eval_thread_pool_size}")
+
+        # 日志级别校验
+        valid_levels = {"debug", "info", "warning", "error", "critical"}
+
+        if self.log_file_level.lower() not in valid_levels:
+            errors.append(f"配置项 log.file_level 取值无效，可选：{','.join(valid_levels)}，当前值：{self.log_file_level}")
+
+        if self.log_console_level.lower() not in valid_levels:
+             errors.append(f"配置项 log.console_level 取值无效，可选：{','.join(valid_levels)}，当前值：{self.log_console_level}")
 
         # ========== Judge-LLM 关联配置校验（仅开启时校验） ==========
         if self.judge_llm_enable:
