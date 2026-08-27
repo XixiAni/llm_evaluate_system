@@ -1,7 +1,7 @@
 import sqlite3
 import uuid
 import time
-from typing import List, Dict, Any,Optional
+from typing import List, Dict, Any, Optional
 from common.logger import get_logger
 
 logger = get_logger("sqlite_client")
@@ -13,6 +13,8 @@ class EvalDbClient:
     封装数据库初始化、批次结果落库、历史查询、批次删除能力，屏蔽底层SQL细节
 
     全链路异常兜底，写入失败不阻断主业务流程
+
+    优化点：开启外键约束、WAL写入模式、高频字段索引
     """
 
     def __init__(self, db_path: str = "./output/eval_result.db"):
@@ -29,10 +31,17 @@ class EvalDbClient:
         """
         获取数据库连接，内部工具方法
 
+        优化：自动开启外键约束、WAL写前日志模式，提升写入性能与数据一致性
+
         Returns:
             sqlite3.Connection: 数据库连接对象
         """
-        return sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path)
+        # 开启外键约束，真正生效关联关系
+        conn.execute("PRAGMA foreign_keys = ON;")
+        # 开启WAL模式，提升并发写入性能，读写不阻塞
+        conn.execute("PRAGMA journal_mode = WAL;")
+        return conn
 
     def _init_tables(self) -> None:
         """
@@ -41,6 +50,8 @@ class EvalDbClient:
         仅首次创建输出INFO日志，表已存在时静默，避免语义冗余
 
         包含两张表：批次主表 eval_batch、用例明细表 eval_case_detail
+
+        优化：新增高频查询字段索引
         """
         try:
             with self._get_connection() as conn:
@@ -75,6 +86,7 @@ class EvalDbClient:
                             execute_timestamp TEXT,
                             thread_id TEXT,
                             api_cost_ms REAL,
+                            judge_api_cost_ms REAL DEFAULT 0,
                             compute_cost_ms REAL,
                             request_cost_ms REAL,
                             answer_content TEXT,
@@ -95,12 +107,21 @@ class EvalDbClient:
                         )
                     """)
 
+                    # 创建索引：高频查询字段
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_batch_execute_time ON eval_batch(execute_time);")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_case_batch_id ON eval_case_detail(batch_id);")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_case_hallucination ON eval_case_detail(hallucination_level);")
                     conn.commit()
                     logger.info("数据库表结构初始化完成")
 
                 else:
                     # 表已存在，执行字段平滑迁移，重复执行无副作用
                     self._migrate_table_columns(cursor)
+
+                    # 补充创建索引（历史库可能缺失）
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_batch_execute_time ON eval_batch(execute_time);")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_case_batch_id ON eval_case_detail(batch_id);")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_case_hallucination ON eval_case_detail(hallucination_level);")
                     conn.commit()
                     logger.debug("数据库表结构已存在，跳过创建，字段迁移完成")
 
@@ -123,7 +144,8 @@ class EvalDbClient:
         # 后续新增字段只需在此列表追加配置，无需重复写判断逻辑
         migrate_columns = [
             ("judge_llm_status", "ALTER TABLE eval_case_detail ADD COLUMN judge_llm_status TEXT DEFAULT 'disabled'"),
-            ("judge_llm_err", "ALTER TABLE eval_case_detail ADD COLUMN judge_llm_err TEXT")
+            ("judge_llm_err", "ALTER TABLE eval_case_detail ADD COLUMN judge_llm_err TEXT"),
+            ("judge_api_cost_ms", "ALTER TABLE eval_case_detail ADD COLUMN judge_api_cost_ms REAL DEFAULT 0")
         ]
         # 仅当字段不存在时执行追加
         for col_name, add_sql in migrate_columns:
@@ -178,6 +200,7 @@ class EvalDbClient:
                         item.get("execute_timestamp", ""),
                         item.get("thread_id", ""),
                         item.get("api_cost_ms", 0),
+                        item.get("judge_api_cost_ms", 0),
                         item.get("compute_cost_ms", 0),
                         item.get("request_cost_ms", 0),
                         item.get("answer_content", ""),
@@ -199,11 +222,11 @@ class EvalDbClient:
                 cursor.executemany("""
                     INSERT INTO eval_case_detail
                     (batch_id, case_id, case_desc, prompt, execute_timestamp, thread_id,
-                    api_cost_ms, compute_cost_ms, request_cost_ms, answer_content,
+                    api_cost_ms, judge_api_cost_ms, compute_cost_ms, request_cost_ms, answer_content,
                     success_flag, error_msg, is_valid, is_compliant, validity_msg, compliance_msg,
                     total_score, relevance_score, completeness_score, hallucination_level, hallucination_msg,
                     judge_llm_status, judge_llm_err)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, detail_rows)
 
                 conn.commit()
