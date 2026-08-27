@@ -6,16 +6,23 @@ llm:
   max_retry: 1
   slow_threshold_ms: 1500
 
-# 评测配置
+# 评测执行配置
 eval:
   output_dir: "./output"
-  concurrent_num: 3 # 最大并发数， 1=串行；参考项目二-n参数设计，配置化灵活调整
+  concurrent_num: 3 # 最大并发数， 1=串行；控制同时发起的请求数量，规避厂商频率限制
+  thread_pool_size: 6 # 【可选】自定义线程池总大小；不填则自动计算（并发数×2，4~10区间）
   db_path: "./output/eval_result.db"  # 新增：SQLite数据库文件路径
 
-# 
+# Judge_LLM 大模型自校验配置
 judge_llm:
   enable: True # 默认关闭，按需开启
   model: "deepseek-v4-flash"
   base_url: "https://api.deepseek.com" # 可与主模型同地址，也可单独配置
   timeout: 60
   max_retry: 2
+
+# 日志级别配置
+log:
+  file_level: info     # 文件日志级别：debug/info/warning/error/critical
+  console_level: info  # 控制台日志级别；开发排查可设为debug，生产运行可设为warning
+
