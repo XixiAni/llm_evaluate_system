@@ -14,6 +14,8 @@ class EvalReporter:
     支持CSV格式导出，自动创建输出目录，编码兼容Excel，字段可灵活扩展
 
     默认文件名自动追加时间戳，多次执行不覆盖历史报告
+
+    优化点：新增judge_api_cost_ms字段导出
     """
     def __init__(self, result_list: List[Dict[str, Any]]):
         """
@@ -43,7 +45,7 @@ class EvalReporter:
         file_path = os.path.join(self.export_dir, filename)
         headers = [
             "case_id", "case_desc", "execute_timestamp",
-            "api_cost_ms", "compute_cost_ms", "request_cost_ms",
+            "api_cost_ms", "judge_api_cost_ms", "compute_cost_ms", "request_cost_ms",
             "success_flag", "error_msg",
             "is_valid", "is_compliant", "validity_msg", "compliance_msg",
             "total_score", "relevance_score", "completeness_score",
