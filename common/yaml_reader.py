@@ -13,6 +13,8 @@ class YamlReader:
     核心能力：文件级缓存、点式路径嵌套取值、环境变量占位符替换、多环境配置支持
 
     所有方法均为类方法，无需实例化即可调用
+
+    优化点：新增缓存清理方法，以支持热更新
     """
     _cache: dict[str, dict] = {}
     _current_env: str = "dev"
@@ -215,3 +217,21 @@ class YamlReader:
         except KeyError:
             logger.warning(f"测试数据节点不存在，返回默认值：{default}")
             return default
+
+    @classmethod
+    def clear_cache(cls, filename: str = None, sub_dir: str = "config") -> None:
+        """
+        清理配置缓存
+        
+        Args:
+            filename: 可选，指定文件名；不传则清空全部缓存
+            sub_dir: 子目录，默认config；指定文件名时需对应
+        """
+        if filename:
+            file_path = cls._get_path(filename, sub_dir=sub_dir)
+            if file_path in cls._cache:
+                del cls._cache[file_path]
+                logger.info(f"已清理配置缓存：{file_path}")
+        else:
+            cls._cache.clear()
+            logger.info("已清空全部配置缓存")

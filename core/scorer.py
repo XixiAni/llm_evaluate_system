@@ -1,4 +1,5 @@
 import jieba
+import threading
 from common.logger import get_logger
 from common.yaml_reader import YamlReader
 from common.error_code import ErrorCode
@@ -38,6 +39,8 @@ class AnswerScorer:
     基于关键词匹配、长度重合度、规则差集实现多维度量化打分与幻觉风险识别。
 
     支持中文分词停用词过滤、白名单豁免、数量+占比双维度风险判定，阈值与权重可通过配置文件灵活调整。
+
+    优化点：线程安全单例模式
     """
     
     def __init__(self):
@@ -253,5 +256,16 @@ class AnswerScorer:
             sample = ",".join(list(extra_words)[:5])
             return {"level": "高", "msg": f"存在大量未核实内容，共{extra_count}个（占比{extra_ratio:.1%}），高幻觉风险：{sample}"}
 
-# 模块级单例：全局唯一实例，全程仅初始化一次
-answer_scorer = AnswerScorer()
+# ========== 线程安全单例实现 ==========
+_answer_scorer_instance = None
+_scorer_lock = threading.Lock()
+def __getattr__(name):
+    """模块级属性访问拦截，实现懒加载单例"""
+    if name == "answer_scorer":
+        global _answer_scorer_instance
+        if not _answer_scorer_instance:
+            with _scorer_lock:
+                if not _answer_scorer_instance:
+                    _answer_scorer_instance = AnswerScorer()
+        return _answer_scorer_instance
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

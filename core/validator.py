@@ -1,3 +1,4 @@
+import threading
 from common.logger import get_logger
 from common.yaml_reader import YamlReader
 from common.error_code import ErrorCode
@@ -11,7 +12,10 @@ class ResponseValidator:
     包含两个维度：有效性校验（空内容、长度不足、高重复）、合规性校验（敏感词匹配）
 
     所有校验规则从eval_rules.yaml配置读取，缺失时使用默认阈值
+
+    优化点：线程安全单例模式
     """
+
     def __init__(self):
         """
         初始化校验器，从配置文件加载敏感词库与有效性校验阈值，缺失字段使用默认值兜底
@@ -147,5 +151,16 @@ class ResponseValidator:
                 }
         return {"pass": True, "msg": "合规性校验通过"}
 
-# 模块级单例：全局唯一实例，全程仅初始化一次
-response_validator = ResponseValidator()
+# ========== 线程安全单例实现 ==========
+_response_validator_instance = None
+_validator_lock = threading.Lock()
+def __getattr__(name):
+    """模块级属性访问拦截，实现懒加载单例"""
+    if name == "response_validator":
+        global _response_validator_instance
+        if not _response_validator_instance:
+            with _validator_lock:
+                if not _response_validator_instance:
+                    _response_validator_instance = ResponseValidator()
+        return _response_validator_instance
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
