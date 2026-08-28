@@ -14,7 +14,7 @@ class EvalDbClient:
 
     全链路异常兜底，写入失败不阻断主业务流程
 
-    优化点：开启外键约束、WAL写入模式、高频字段索引
+    优化点：开启外键约束、WAL写入模式、高频字段索引、Judge原始响应落库
     """
 
     def __init__(self, db_path: str = "./output/eval_result.db"):
@@ -103,6 +103,7 @@ class EvalDbClient:
                             hallucination_msg TEXT,
                             judge_llm_status TEXT DEFAULT 'disabled',
                             judge_llm_err TEXT,
+                            judge_raw_resp TEXT DEFAULT '',
                             FOREIGN KEY (batch_id) REFERENCES eval_batch(batch_id)
                         )
                     """)
@@ -145,7 +146,8 @@ class EvalDbClient:
         migrate_columns = [
             ("judge_llm_status", "ALTER TABLE eval_case_detail ADD COLUMN judge_llm_status TEXT DEFAULT 'disabled'"),
             ("judge_llm_err", "ALTER TABLE eval_case_detail ADD COLUMN judge_llm_err TEXT"),
-            ("judge_api_cost_ms", "ALTER TABLE eval_case_detail ADD COLUMN judge_api_cost_ms REAL DEFAULT 0")
+            ("judge_api_cost_ms", "ALTER TABLE eval_case_detail ADD COLUMN judge_api_cost_ms REAL DEFAULT 0"),
+            ("judge_raw_resp", "ALTER TABLE eval_case_detail ADD COLUMN judge_raw_resp TEXT DEFAULT ''")
         ]
         # 仅当字段不存在时执行追加
         for col_name, add_sql in migrate_columns:
@@ -216,7 +218,8 @@ class EvalDbClient:
                         item.get("hallucination_level", ""),
                         item.get("hallucination_msg", ""),
                         item.get("judge_llm_status", "disabled"),
-                        item.get("judge_llm_err", "")
+                        item.get("judge_llm_err", ""),
+                        item.get("judge_raw_resp", "")
                     ))
 
                 cursor.executemany("""
@@ -225,8 +228,8 @@ class EvalDbClient:
                     api_cost_ms, judge_api_cost_ms, compute_cost_ms, request_cost_ms, answer_content,
                     success_flag, error_msg, is_valid, is_compliant, validity_msg, compliance_msg,
                     total_score, relevance_score, completeness_score, hallucination_level, hallucination_msg,
-                    judge_llm_status, judge_llm_err)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    judge_llm_status, judge_llm_err, judge_raw_resp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, detail_rows)
 
                 conn.commit()
@@ -284,6 +287,7 @@ class EvalDbClient:
         except Exception as e:
             logger.error(f"查询批次详情失败，batch_id={batch_id}：{str(e)}", exc_info=True)
             return None
+
     def query_case_details_by_batch_id(self, batch_id: str) -> List[Dict[str, Any]]:
         """
         查询指定批次下的所有用例明细
