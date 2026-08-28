@@ -12,7 +12,7 @@ class ConfigLoader:
 
     配置错误直接终止程序，聚合所有问题一次性输出
 
-    优化点：新增日志级别配置、线程池大小配置
+    优化点：新增日志级别配置、线程池大小配置、错误详情结构化输出
     """
 
     def __init__(self):
@@ -58,44 +58,61 @@ class ConfigLoader:
         self.log_console_level = log_config.get("console_level", "info")
 
     def _validate_config(self) -> None:
-        """集中校验所有配置合法性，聚合错误后统一输出"""
+        """
+        集中校验所有配置合法性，聚合错误后统一输出；
+
+        每条错误携带实际值与类型，便于排错
+        """
         errors = []
 
         # ========== 通用基础配置校验 ==========
         if not self.llm_base_url or not self.llm_base_url.strip():
-            errors.append("配置项 llm.base_url 不能为空，请填写正确的模型接口地址")
-
+            errors.append(
+                f"配置项 llm.base_url 非法，期望：非空字符串，实际值：{self.llm_base_url}（类型：{type(self.llm_base_url).__name__}）"
+            )
         if not isinstance(self.llm_timeout, (int, float)) or self.llm_timeout <= 0:
-            errors.append(f"配置项 llm.timeout 必须为大于0的数字，当前值：{self.llm_timeout}")
-
+            errors.append(
+                f"配置项 llm.timeout 非法，期望：大于0的数字，实际值：{self.llm_timeout}（类型：{type(self.llm_timeout).__name__}）"
+            )
         if not isinstance(self.llm_max_retry, int) or self.llm_max_retry < 0:
-            errors.append(f"配置项 llm.max_retry 必须为非负整数，当前值：{self.llm_max_retry}")
-
+            errors.append(
+                f"配置项 llm.max_retry 非法，期望：非负整数，实际值：{self.llm_max_retry}（类型：{type(self.llm_max_retry).__name__}）"
+            )
         if not isinstance(self.eval_concurrent_num, int) or self.eval_concurrent_num <= 0:
-            errors.append(f"配置项 eval.concurrent_num 必须为正整数，当前值：{self.eval_concurrent_num}")
-
+            errors.append(
+                f"配置项 eval.concurrent_num 非法，期望：正整数，实际值：{self.eval_concurrent_num}（类型：{type(self.eval_concurrent_num).__name__}）"
+            )
         if self.eval_thread_pool_size is not None and (not isinstance(self.eval_thread_pool_size, int) or self.eval_thread_pool_size <= 0):
-            errors.append(f"配置项 eval.thread_pool_size 必须为正整数，当前值：{self.eval_thread_pool_size}")
+            errors.append(
+                f"配置项 eval.thread_pool_size 非法，期望：正整数，实际值：{self.eval_thread_pool_size}（类型：{type(self.eval_thread_pool_size).__name__}）"
+            )
 
         # 日志级别校验
         valid_levels = {"debug", "info", "warning", "error", "critical"}
 
         if self.log_file_level.lower() not in valid_levels:
-            errors.append(f"配置项 log.file_level 取值无效，可选：{','.join(valid_levels)}，当前值：{self.log_file_level}")
-
+            errors.append(
+                f"配置项 log.file_level 非法，可选：{','.join(valid_levels)}，实际值：{self.log_file_level}（类型：{type(self.log_file_level).__name__}）"
+            )
         if self.log_console_level.lower() not in valid_levels:
-             errors.append(f"配置项 log.console_level 取值无效，可选：{','.join(valid_levels)}，当前值：{self.log_console_level}")
+            errors.append(
+                f"配置项 log.console_level 非法，可选：{','.join(valid_levels)}，实际值：{self.log_console_level}（类型：{type(self.log_console_level).__name__}）"
+            )
 
         # ========== Judge-LLM 关联配置校验（仅开启时校验） ==========
         if self.judge_llm_enable:
             if not self.judge_llm_base_url or not self.judge_llm_base_url.strip():
-                errors.append("配置项 judge_llm.base_url 不能为空（Judge-LLM已开启）")
-
+                errors.append(
+                    f"配置项 judge_llm.base_url 非法（Judge-LLM已开启），期望：非空字符串，实际值：{self.judge_llm_base_url}（类型：{type(self.judge_llm_base_url).__name__}）"
+                )
             if not isinstance(self.judge_llm_timeout, (int, float)) or self.judge_llm_timeout <= 0:
-                errors.append(f"配置项 judge_llm.timeout 必须为大于0的数字（Judge-LLM已开启），当前值：{self.judge_llm_timeout}")
-
+                errors.append(
+                    f"配置项 judge_llm.timeout 非法（Judge-LLM已开启），期望：大于0的数字，实际值：{self.judge_llm_timeout}（类型：{type(self.judge_llm_timeout).__name__}）"
+                )
             if not isinstance(self.judge_llm_max_retry, int) or self.judge_llm_max_retry < 0:
-                errors.append(f"配置项 judge_llm.max_retry 必须为非负整数（Judge-LLM已开启），当前值：{self.judge_llm_max_retry}")
+                errors.append(
+                    f"配置项 judge_llm.max_retry 非法（Judge-LLM已开启），期望：非负整数，实际值：{self.judge_llm_max_retry}（类型：{type(self.judge_llm_max_retry).__name__}）"
+                )
 
         # 错误汇总输出
         if errors:
