@@ -11,6 +11,16 @@ from common.yaml_reader import YamlReader
 
 logger = get_logger("batch_runner")
 
+# 全局停止事件：用于接收中断信号，优雅停止批量任务
+_stop_event = threading.Event()
+def request_stop() -> None:
+    """请求停止批量任务，线程安全"""
+    _stop_event.set()
+
+def is_stop_requested() -> bool:
+    """检查是否已请求停止"""
+    return _stop_event.is_set()
+
 class BatchEvalRunner:
     """
     批量评测执行器
@@ -25,7 +35,7 @@ class BatchEvalRunner:
 
     校验器、评分器复用模块级单例，避免重复初始化开销
 
-    优化点：支持自定义线程池大小、Judge-LLM独立耗时统计
+    优化点：支持自定义线程池大小、Judge-LLM独立耗时统计、优雅中断
     """
 
     def __init__(self, llm_client: LLMClient, concurrent_num: int = 1, judge_llm_client: Optional[LLMClient] = None, thread_pool_size: int = None):
@@ -106,7 +116,8 @@ class BatchEvalRunner:
             "hallucination_level": "",
             "hallucination_msg": "",
             "judge_llm_status": "disabled",
-            "judge_llm_err": None
+            "judge_llm_err": None,
+            "judge_raw_resp": ""
         }
 
         try:
@@ -139,7 +150,6 @@ class BatchEvalRunner:
                         answer_content=resp.get("data", "")
                     )
 
-                    # 计时起点紧接调用前，简单逻辑无异常风险
                     judge_start = time.time()
                     judge_resp = None
 
@@ -152,12 +162,14 @@ class BatchEvalRunner:
                         # 接口层异常：api_failed标记，网络超时、连接失败等；降级规则结果
                         single_result["judge_llm_status"] = "api_failed"
                         single_result["judge_llm_err"] = str(e)
+                        single_result["judge_raw_resp"] = judge_resp.get("data", "") if judge_resp else str(e)
                         logger.warning(f"用例 {single_result['case_id']} Judge-LLM接口调用失败，降级使用规则版：{str(e)}")
                     else:
                         # 调用无异常，但返回业务错误码，也标记为api_failed
                         if judge_resp["code"] != 0:
                             single_result["judge_llm_status"] = "api_failed"
                             single_result["judge_llm_err"] = judge_resp["msg"]
+                            single_result["judge_raw_resp"] = judge_resp.get("data", "")
                             logger.warning(f"用例 {single_result['case_id']} Judge-LLM接口返回错误，降级使用规则版：{judge_resp['msg']}")
                         else:
                             # 接口+业务双成功，标记为success
@@ -198,6 +210,7 @@ class BatchEvalRunner:
                         # 解析失败：parse_failed标记，JSON解析失败；保留规则版结果
                         single_result["judge_llm_status"] = "parse_failed"
                         single_result["judge_llm_err"] = f"JSON解析失败：{str(e)}"
+                        single_result["judge_raw_resp"] = judge_resp.get("data", "")
                         logger.warning(f"用例 {single_result['case_id']} Judge-LLM结果解析失败，保留规则版结果：{str(e)}")
 
                 single_result["compute_cost_ms"] = round((time.time() - compute_start) * 1000, 2)
@@ -216,7 +229,9 @@ class BatchEvalRunner:
     def run_batch_cases(self, case_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         批量执行所有评测用例，清空历史结果后，按并发配置执行
-        
+
+        支持优雅中断：收到停止信号后不再提交新任务，等待已提交任务完成后返回
+
         结果顺序与输入用例顺序完全一致，不影响后续统计与导出
 
         Args:
@@ -226,18 +241,30 @@ class BatchEvalRunner:
         """
         self.eval_result_list.clear()
         mode_desc = "串行" if self.api_concurrent_num == 1 else f"API并发{self.api_concurrent_num}，线程池{self._thread_pool_size}线程"
+
         print(f"===== 开始批量评测，共加载 {len(case_list)} 条评测用例，执行模式：{mode_desc} =====")
         # 并发数为1时等价串行，直接循环执行，避免线程池额外开销
         if self.api_concurrent_num <= 1:
-            self.eval_result_list = [self.run_single_case(case) for case in case_list]
+            for case in case_list:
+                if is_stop_requested():
+                    print("\n⚠️ 检测到中断请求，停止提交新用例")
+                    break
+
+                self.eval_result_list.append(self.run_single_case(case))
         else:
             # 线程池执行，按提交顺序收集结果，保证顺序与输入一致
             with ThreadPoolExecutor(max_workers = self._thread_pool_size) as executor:
-                # 按顺序提交任务，得到future列表与输入一一对应
-                futures = [executor.submit(self.run_single_case, case) for case in case_list]
+                futures = []
+                for case in case_list:
+                    if is_stop_requested():
+                        print("\n⚠️ 检测到中断请求，停止提交新用例")
+                        break
+
+                    futures.append(executor.submit(self.run_single_case, case))
+
                 # 按提交顺序逐个取结果，保证结果列表顺序与输入用例完全一致
                 self.eval_result_list = [future.result() for future in futures]
-        print(f"===== 批量评测全部完成，总计 {len(self.eval_result_list)} 条执行记录 =====")
+        print(f"===== 批量评测完成，已执行 {len(self.eval_result_list)} 条记录 =====")
         return self.eval_result_list
 
     def get_all_results(self) -> List[Dict[str, Any]]:
