@@ -9,13 +9,16 @@ class EvalStatistics:
     评测结果统计与报告输出工具
 
     接收评测结果列表，计算成功率、得分均值、幻觉分布、校验通过率等核心指标，
-    
+
     并提供格式化控制台输出能力
+
+    优化点：新增Judge-LLM链路成功率统计
     """
 
     def __init__(self, result_list: List[Dict[str, Any]], total_time: float):
         """
         初始化统计器，绑定评测结果与总耗时
+
         Args:
             result_list: 评测结果字典列表
             total_time: 批量评测总耗时，单位秒
@@ -30,8 +33,9 @@ class EvalStatistics:
     def calc_summary(self) -> Dict[str, Any]:
         """
         计算全量统计指标，返回结构化汇总数据
+
         Returns:
-            dict: 包含成功率、得分、幻觉分布、校验通过率四类指标
+            dict: 包含成功率、得分、幻觉分布、校验通过率、Judge链路统计，五类指标
         """
         summary = {
             "total": self.total,
@@ -41,6 +45,7 @@ class EvalStatistics:
             "avg_score": self._calc_avg_scores(),
             "hallucination_dist": self._calc_hallucination_dist(),
             "validate_pass_rate": self._calc_validate_pass_rate(),
+            "judge_stats": self._calc_judge_stats(),
             "total_time": self.total_time,
             "avg_time_per_case": round(self.total_time / self.total, 2) if self.total > 0 else 0
         }
@@ -49,6 +54,7 @@ class EvalStatistics:
     def print_summary(self) -> None:
         """
         格式化打印汇总报告到控制台
+
         所有边界场景（全失败、无用例）均做兜底处理
         """
         print("\n" + "=" * 60)
@@ -71,6 +77,8 @@ class EvalStatistics:
         self._print_hallucination_section()
         print("-" * 60)
         self._print_validate_section()
+        print("-" * 60)
+        self._print_judge_section()
         print("=" * 60)
 
     def _calc_success_rate(self) -> float:
@@ -130,6 +138,26 @@ class EvalStatistics:
             "compliant": f"{compliant_pass / self.success_count * 100:.2f}%"
         }
 
+    def _calc_judge_stats(self) -> Dict[str, Any]:
+        """计算Judge-LLM链路统计，未开启时返回禁用标记"""
+        judge_cases = [item for item in self.result_list if item["judge_llm_status"] != "disabled"]
+        total = len(judge_cases)
+        if total == 0:
+            return {"enable": False, "total": 0, "msg": "Judge-LLM未开启"}
+        
+        success = sum(1 for item in judge_cases if item["judge_llm_status"] == "success")
+        api_failed = sum(1 for item in judge_cases if item["judge_llm_status"] == "api_failed")
+        parse_failed = sum(1 for item in judge_cases if item["judge_llm_status"] == "parse_failed")
+        success_rate = round(success / total * 100, 2)
+        return {
+            "enable": True,
+            "total": total,
+            "success": success,
+            "api_failed": api_failed,
+            "parse_failed": parse_failed,
+            "success_rate": f"{success_rate}%"
+        }
+
     def _print_score_section(self) -> None:
         """打印得分统计区块"""
         score_data = self._calc_avg_scores()
@@ -152,3 +180,13 @@ class EvalStatistics:
         print("【校验通过率】")
         print(f"有效性通过率：{valid_data['valid']}")
         print(f"合规性通过率：{valid_data['compliant']}")
+
+    def _print_judge_section(self) -> None:
+        """打印Judge-LLM链路统计区块"""
+        judge_data = self._calc_judge_stats()
+        print("【Judge-LLM 链路统计】")
+        if not judge_data["enable"]:
+            print("未开启")
+            return
+        print(f"调用总数：{judge_data['total']} | 成功：{judge_data['success']} | 成功率：{judge_data['success_rate']}")
+        print(f"接口失败：{judge_data['api_failed']} | 解析失败：{judge_data['parse_failed']}")
