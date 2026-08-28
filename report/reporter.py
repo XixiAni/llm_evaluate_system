@@ -15,8 +15,9 @@ class EvalReporter:
 
     默认文件名自动追加时间戳，多次执行不覆盖历史报告
 
-    优化点：新增judge_api_cost_ms字段导出
+    优化点：新增judge_api_cost_ms、judge_raw_resp字段导出
     """
+
     def __init__(self, result_list: List[Dict[str, Any]]):
         """
         初始化报告生成器，接收评测结果列表
@@ -50,7 +51,7 @@ class EvalReporter:
             "is_valid", "is_compliant", "validity_msg", "compliance_msg",
             "total_score", "relevance_score", "completeness_score",
             "hallucination_level", "hallucination_msg",
-            "judge_llm_status", "judge_llm_err",
+            "judge_llm_status", "judge_llm_err", "judge_raw_resp",
             "answer_content"
         ]
         # 打开文件，w=覆盖写入模式；newline="" 消除CSV多余空行（Windows系统特有bug修复）
