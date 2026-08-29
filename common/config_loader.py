@@ -113,7 +113,22 @@ class ConfigLoader:
                 errors.append(
                     f"配置项 judge_llm.max_retry 非法（Judge-LLM已开启），期望：非负整数，实际值：{self.judge_llm_max_retry}（类型：{type(self.judge_llm_max_retry).__name__}）"
                 )
-
+        # ========== 安全合规校验 ==========
+        # 禁止配置文件中出现明文密钥
+        sensitive_keys = ["api_key", "secret_key", "token", "secret"]
+        config_raw = YamlReader.read_file("config.yaml")
+        def _check_sensitive(data: dict, path: str = "") -> list:
+            issues = []
+            for k, v in data.items():
+                current_path = f"{path}.{k}" if path else k
+                if k.lower() in sensitive_keys and isinstance(v, str) and v.strip():
+                    issues.append(f"配置项 {current_path} 存在明文敏感密钥，请移除并通过环境变量注入")
+                if isinstance(v, dict):
+                    issues.extend(_check_sensitive(v, current_path))
+            return issues
+        
+        sensitive_issues = _check_sensitive(config_raw)
+        errors.extend(sensitive_issues)
         # 错误汇总输出
         if errors:
             print("\n❌ 配置校验失败，共发现 {} 处问题：".format(len(errors)))

@@ -1,6 +1,8 @@
 import sqlite3
 import uuid
 import time
+import os
+import shutil
 from typing import List, Dict, Any, Optional
 from common.logger import get_logger
 
@@ -10,21 +12,27 @@ class EvalDbClient:
     """
     SQLite 评测结果持久化客户端
 
-    封装数据库初始化、批次结果落库、历史查询、批次删除能力，屏蔽底层SQL细节
+    封装数据库初始化、批次结果落库、历史查询、批次删除、备份恢复能力，屏蔽底层SQL细节
 
     全链路异常兜底，写入失败不阻断主业务流程
 
     优化点：开启外键约束、WAL写入模式、高频字段索引、Judge原始响应落库
+
+    优化点：新增热备份、完整性校验、备份留存管理、恢复入口
     """
 
-    def __init__(self, db_path: str = "./output/eval_result.db"):
+    def __init__(self, db_path: str = "./output/eval_result.db", backup_retention: int = 10):
         """
         初始化数据库客户端，自动完成表结构创建与字段迁移
 
         Args:
             db_path: SQLite 数据库文件路径，文件不存在时自动创建
+            backup_retention: 备份文件保留份数，默认保留最近10份
         """
         self.db_path = db_path
+        self.backup_retention = backup_retention
+        self.backup_dir = os.path.join(os.path.dirname(db_path), "backup")
+        os.makedirs(self.backup_dir, exist_ok=True)
         self._init_tables()
 
     def _get_connection(self) -> sqlite3.Connection:
@@ -154,7 +162,113 @@ class EvalDbClient:
             if col_name not in exist_columns:
                 cursor.execute(add_sql)
 
-    def save_batch_result(self, result_list: List[Dict[str, Any]], summary: Dict[str, Any], model_name: str = "unknown") -> str:
+    def check_integrity(self) -> bool:
+        """
+        执行数据库完整性检查，检测页损坏、索引损坏等问题
+
+        Returns:
+            bool: 完整返回True，损坏返回False
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA integrity_check;")
+                result = cursor.fetchone()[0]
+                if result == "ok":
+                    logger.info("数据库完整性检查通过")
+                    return True
+                else:
+                    logger.error(f"数据库完整性检查失败：{result}")
+                    return False
+        except Exception as e:
+            logger.error(f"完整性检查执行异常：{str(e)}", exc_info=True)
+            return False
+
+    def backup(self, custom_tag: str = "") -> str:
+        """
+        执行在线热备份，不阻塞正常读写
+
+        Args:
+            custom_tag: 自定义备份标签，追加到文件名中
+        Returns:
+            str: 备份文件路径，失败返回空字符串
+        """
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        tag = f"_{custom_tag}" if custom_tag else ""
+        backup_filename = f"eval_backup_{timestamp}{tag}.db"
+        backup_path = os.path.join(self.backup_dir, backup_filename)
+        
+        try:
+            src_conn = self._get_connection()
+            dst_conn = sqlite3.connect(backup_path)
+            src_conn.backup(dst_conn)
+            dst_conn.close()
+            src_conn.close()
+            
+            # 校验备份完整性
+            backup_conn = sqlite3.connect(backup_path)
+            backup_conn.execute("PRAGMA integrity_check;")
+            backup_conn.close()
+
+            logger.info(f"数据库备份完成：{backup_path}")
+            self._clean_old_backups()
+            return backup_path
+        except Exception as e:
+            logger.error(f"数据库备份失败：{str(e)}", exc_info=True)
+            if os.path.exists(backup_path):
+                os.remove(backup_path)
+            return ""
+
+    def _clean_old_backups(self) -> None:
+        """清理过期备份，保留最近N份"""
+        try:
+            backup_files = [
+                os.path.join(self.backup_dir, f) 
+                for f in os.listdir(self.backup_dir) 
+                if f.startswith("eval_backup_") and f.endswith(".db")
+            ]
+            backup_files.sort(key=os.path.getmtime, reverse=True)
+
+            if len(backup_files) > self.backup_retention:
+                for old_file in backup_files[self.backup_retention:]:
+                    os.remove(old_file)
+                    logger.debug(f"清理过期备份：{old_file}")
+        except Exception as e:
+            logger.warning(f"备份清理失败：{str(e)}")
+    def restore_from_backup(self, backup_path: str) -> bool:
+        """
+        从备份文件恢复数据库，恢复前自动备份当前库
+
+        Args:
+            backup_path: 备份文件路径
+        Returns:
+            bool: 恢复成功返回True
+        """
+        if not os.path.exists(backup_path):
+            logger.error(f"备份文件不存在：{backup_path}")
+            return False
+        
+        # 先校验备份完整性
+        try:
+            check_conn = sqlite3.connect(backup_path)
+            check_conn.execute("PRAGMA integrity_check;")
+            check_conn.close()
+        except Exception as e:
+            logger.error(f"备份文件损坏，无法恢复：{str(e)}")
+            return False
+
+        # 恢复前先备份当前库
+        self.backup(custom_tag="before_restore")
+        
+        try:
+            shutil.copy2(backup_path, self.db_path)
+            logger.info(f"数据库恢复成功，来源：{backup_path}")
+            return True
+        except Exception as e:
+            logger.error(f"数据库恢复失败：{str(e)}", exc_info=True)
+            return False
+
+    def save_batch_result(self, result_list: List[Dict[str, Any]], summary: Dict[str, Any], model_name: str = "unknown", auto_backup: bool = True) -> str:
         """
         保存一整批评测结果：写入批次主表 + 批量写入所有用例明细
 
@@ -162,6 +276,7 @@ class EvalDbClient:
             result_list: 单条评测结果列表
             summary: 统计汇总数据
             model_name: 本次评测使用的模型名称
+            auto_backup: 保存完成后是否自动备份
         Returns:
             str: 生成的批次ID，失败返回空字符串
         """
@@ -234,6 +349,10 @@ class EvalDbClient:
 
                 conn.commit()
                 logger.info(f"批次 {batch_id} 结果已持久化，共 {len(result_list)} 条用例")
+
+                if auto_backup:
+                    self.backup(custom_tag=batch_id)
+
                 return batch_id
 
         except Exception as e:
