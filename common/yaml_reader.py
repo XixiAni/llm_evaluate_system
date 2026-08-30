@@ -15,6 +15,8 @@ class YamlReader:
     所有方法均为类方法，无需实例化即可调用
 
     优化点：新增缓存清理方法，以支持热更新
+
+    优化点：缓存命中与节点读取日志降级为debug，减少冗余日志输出
     """
     _cache: dict[str, dict] = {}
     _current_env: str = "dev"
@@ -116,7 +118,7 @@ class YamlReader:
             current_node = current_node[key]
             
         success_prefix = error_prefix.replace("读取失败：", "读取成功：")
-        logger.info(f"{success_prefix}{key_path} = {current_node}")
+        logger.debug(f"{success_prefix}{key_path} = {current_node}")
         return current_node
 
     @classmethod
@@ -135,7 +137,7 @@ class YamlReader:
         """
         file_path = cls._get_path(filename, sub_dir=sub_dir)
         if file_path in cls._cache:
-            logger.info(f"匹配到配置缓存，直接返回：{file_path}")
+            logger.debug(f"匹配到配置缓存，直接返回：{file_path}")
             return cls._cache[file_path]
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -194,7 +196,7 @@ class YamlReader:
         file_path = cls._get_abs_path("data",filename)
         logger.info(f"读取测试数据，文件：{filename}，路径：{key_path if key_path else '使用全量数据'}")
         if file_path in cls._cache:
-            logger.info(f"匹配到测试数据缓存，直接返回：{file_path}")
+            logger.debug(f"匹配到测试数据缓存，直接返回：{file_path}")
             data = cls._cache[file_path]
         else:
             try:
