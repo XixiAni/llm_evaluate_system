@@ -19,6 +19,8 @@ class LLMClient:
     兼容OpenAI协议接口，支持密钥脱敏、超时控制、自动重试、慢请求告警、统一返回格式
 
     口径统一：错误码对齐全局ErrorCode枚举
+
+    优化点：重试机制升级为指数退避，新增5xx服务端错误可重试
     """
     def __init__(self, api_key: str = None, base_url: str = "", timeout: int = 30, max_retry: int = 1):
         """
@@ -85,11 +87,31 @@ class LLMClient:
                 "data": resp.text,
                 "msg": f"{ErrorCode.RESPONSE_PARSE_ERROR.msg}，预期为JSON格式"}
 
+    def _is_retryable_error(self, exception: Exception, resp = None) -> bool:
+        """
+        判断异常是否属于可重试场景
+        
+        Args:
+            exception: 捕获的异常对象
+            resp: 可选，响应对象，用于判断HTTP状态码
+        Returns:
+            bool: 是否可重试
+        """
+        # 网络超时、连接错误：一定可重试
+        if isinstance(exception, (Timeout, ConnectionError)):
+            return True
+        # HTTP错误：仅5xx服务端错误可重试
+        if isinstance(exception, HTTPError) and resp is not None:
+            return resp.status_code >= 500
+        # 其他异常不可重试
+        return False
     def send_post(self, api_path: str, request_data: dict) -> dict:
         """
         通用POST请求方法，自带超时控制、网络异常重试、异常分类与统一返回
 
         错误码对齐全局ErrorCode枚举
+
+        重试策略：可重试异常采用指数退避间隔，避免重试风暴
 
         Args:
             api_path: 接口路径，会与base_url拼接为完整地址
@@ -104,7 +126,7 @@ class LLMClient:
         full_url = urljoin(self.base_url, api_path)
         start_time = time.time()
         retry_count = 0
-        retry_interval = 1
+        retry_interval = 1 # 初始重试间隔1秒，指数退避
         last_exception = None
 
         logger.info(f"【POST请求发起】接口地址：{full_url}，请求入参：{request_data}")
@@ -127,13 +149,17 @@ class LLMClient:
                     logger.warning(f"【慢请求告警】接口：{full_url}，耗时{cost}ms，超过阈值{self.slow_threshold_ms}ms，请关注网络状况或接口性能")
                 logger.info(f"【POST请求完成】耗时{cost}ms，返回状态码：{resp.status_code}，统一返回码：{parse_result['code']}")
                 return parse_result
-            except (Timeout, ConnectionError) as e:
+            except (Timeout, ConnectionError, HTTPError) as e:
                 last_exception = e
+                if not self._is_retryable_error(e, resp):
+                    break
                 retry_count += 1
                 if retry_count > self.max_retry:
                     break
-                logger.warning(f"网络波动，{retry_interval}秒后重试第 {retry_count} 次...")
+                logger.warning(f"网络波动/服务端异常，{retry_interval}秒后重试第 {retry_count} 次...")
                 time.sleep(retry_interval)
+
+                retry_interval *= 2  # 指数退避：1s → 2s → 4s
 
             except RequestException as e:
                 last_exception = e  

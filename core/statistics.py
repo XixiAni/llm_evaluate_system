@@ -13,6 +13,8 @@ class EvalStatistics:
     并提供格式化控制台输出能力
 
     优化点：新增Judge-LLM链路成功率统计
+    
+    优化点：单次遍历计算全量指标，减少冗余循环
     """
 
     def __init__(self, result_list: List[Dict[str, Any]], total_time: float):
@@ -34,18 +36,86 @@ class EvalStatistics:
         """
         计算全量统计指标，返回结构化汇总数据
 
+        单次遍历成功列表，同时累加所有维度指标，减少冗余循环
+
         Returns:
             dict: 包含成功率、得分、幻觉分布、校验通过率、Judge链路统计，五类指标
         """
+        # 初始化累加器
+        total_score_sum = 0.0
+        relevance_sum = 0.0
+        completeness_sum = 0.0
+        hallucination_dist = {
+            "none": 0, "low": 0, "medium": 0, "high": 0, "unknown": 0
+        }
+        valid_pass = 0
+        compliant_pass = 0
+
+        # 单次遍历累加所有指标
+        for item in self.success_list:
+            total_score_sum += item["total_score"]
+            relevance_sum += item["relevance_score"]
+            completeness_sum += item["completeness_score"]
+            
+            level = item["hallucination_level"]
+            if level == "无":
+                hallucination_dist["none"] += 1
+            elif level == "低":
+                hallucination_dist["low"] += 1
+            elif level == "中":
+                hallucination_dist["medium"] += 1
+            elif level == "高":
+                hallucination_dist["high"] += 1
+            else:
+                hallucination_dist["unknown"] += 1
+            
+            if item["is_valid"]:
+                valid_pass += 1
+            if item["is_compliant"]:
+                compliant_pass += 1
+
+        # 统一计算结果
+        success_rate = self._calc_success_rate()
+        
+        if self.success_count == 0:
+            avg_scores = {
+                "total": "N/A(用例全部调用失败)",
+                "relevance": "N/A(用例全部调用失败)",
+                "completeness": "N/A(用例全部调用失败)"
+            }
+            hall_dist = {
+                level: {"count": 0, "ratio": "N/A(用例全部调用失败)"}
+                for level in ["none", "low", "medium", "high", "unknown"]
+            }
+            validate_rate = {
+                "valid": "N/A(用例全部调用失败)",
+                "compliant": "N/A(用例全部调用失败)"
+            }
+        else:
+            avg_scores = {
+                "total": round(total_score_sum / self.success_count, 2),
+                "relevance": round(relevance_sum / self.success_count, 2),
+                "completeness": round(completeness_sum / self.success_count, 2)
+            }
+            hall_dist = {
+                level: {"count": cnt, "ratio": f"{cnt / self.success_count * 100:.2f}%"}
+                for level, cnt in hallucination_dist.items()
+            }
+            validate_rate = {
+                "valid": f"{valid_pass / self.success_count * 100:.2f}%",
+                "compliant": f"{compliant_pass / self.success_count * 100:.2f}%"
+            }
+
+        judge_stats = self._calc_judge_stats()
         summary = {
             "total": self.total,
             "success": self.success_count,
             "failed": self.failed_count,
-            "success_rate": self._calc_success_rate(),
-            "avg_score": self._calc_avg_scores(),
-            "hallucination_dist": self._calc_hallucination_dist(),
-            "validate_pass_rate": self._calc_validate_pass_rate(),
-            "judge_stats": self._calc_judge_stats(),
+            "success_rate": success_rate,
+            "avg_score": avg_scores,
+            "hallucination_dist": hall_dist,
+            "validate_pass_rate": validate_rate,
+            "judge_stats": judge_stats,
             "total_time": self.total_time,
             "avg_time_per_case": round(self.total_time / self.total, 2) if self.total > 0 else 0
         }
@@ -88,55 +158,29 @@ class EvalStatistics:
         return round(self.success_count / self.total * 100, 2)
 
     def _calc_avg_scores(self) -> Dict[str, Any]:
-        """计算各维度平均得分，全失败时返回N/A描述"""
-        if self.success_count == 0:
-            return {
-                "total": "N/A(用例全部调用失败)",
-                "relevance": "N/A(用例全部调用失败)",
-                "completeness": "N/A(用例全部调用失败)"
-            }
-        return {
-            "total": round(sum(item["total_score"] for item in self.success_list) / self.success_count, 2),
-            "relevance": round(sum(item["relevance_score"] for item in self.success_list) / self.success_count, 2),
-            "completeness": round(sum(item["completeness_score"] for item in self.success_list) / self.success_count, 2)
-        }
+        """
+        计算各维度平均得分，全失败时返回N/A描述
+
+        原逻辑整合至calc_summary()，保留独立调用接口
+
+        """
+        return self.calc_summary()["avg_score"]
 
     def _calc_hallucination_dist(self) -> Dict[str, Any]:
-        """统计幻觉风险等级分布，全失败时返回N/A描述"""
-        if self.success_count == 0:
-            return {
-                "none": {"count": 0, "ratio": "N/A(用例全部调用失败)"},
-                "low": {"count": 0, "ratio": "N/A(用例全部调用失败)"},
-                "medium": {"count": 0, "ratio": "N/A(用例全部调用失败)"},
-                "high": {"count": 0, "ratio": "N/A(用例全部调用失败)"},
-                "unknown": {"count": 0, "ratio": "N/A(用例全部调用失败)"}
-            }
-        levels = [item["hallucination_level"] for item in self.success_list]
-        dist = {
-            "none": levels.count("无"),
-            "low": levels.count("低"),
-            "medium": levels.count("中"),
-            "high": levels.count("高"),
-            "unknown": levels.count("未知")
-        }
-        return {
-            level: {"count": cnt, "ratio": f"{cnt / self.success_count * 100:.2f}%"}
-            for level, cnt in dist.items()
-        }
+        """
+        统计幻觉风险等级分布，全失败时返回N/A描述
 
+        原逻辑整合至calc_summary()，保留独立调用接口
+        """
+        return self.calc_summary()["hallucination_dist"]
+    
     def _calc_validate_pass_rate(self) -> Dict[str, Any]:
-        """计算有效性、合规性校验通过率，全失败时返回N/A描述"""
-        if self.success_count == 0:
-            return {
-                "valid": "N/A(用例全部调用失败)",
-                "compliant": "N/A(用例全部调用失败)"
-            }
-        valid_pass = sum(1 for item in self.success_list if item["is_valid"])
-        compliant_pass = sum(1 for item in self.success_list if item["is_compliant"])
-        return {
-            "valid": f"{valid_pass / self.success_count * 100:.2f}%",
-            "compliant": f"{compliant_pass / self.success_count * 100:.2f}%"
-        }
+        """
+        计算有效性、合规性校验通过率，全失败时返回N/A描述
+
+        原逻辑整合至calc_summary()，保留独立调用接口
+        """
+        self.calc_summary()["validate_pass_rate"]
 
     def _calc_judge_stats(self) -> Dict[str, Any]:
         """计算Judge-LLM链路统计，未开启时返回禁用标记"""
@@ -160,13 +204,13 @@ class EvalStatistics:
 
     def _print_score_section(self) -> None:
         """打印得分统计区块"""
-        score_data = self._calc_avg_scores()
+        score_data = self.calc_summary()["avg_score"]
         print("【得分统计】")
         print(f"平均总分：{score_data['total']} | 平均相关性得分：{score_data['relevance']} | 平均完整度得分：{score_data['completeness']}")
 
     def _print_hallucination_section(self) -> None:
         """打印幻觉风险分布区块"""
-        hall_data = self._calc_hallucination_dist()
+        hall_data = self.calc_summary()["hallucination_dist"]
         print("【幻觉风险分布】")
         print(f"无风险：{hall_data['none']['count']} 条 {hall_data['none']['ratio']}")
         print(f"低风险：{hall_data['low']['count']} 条 {hall_data['low']['ratio']}")
@@ -176,7 +220,7 @@ class EvalStatistics:
 
     def _print_validate_section(self) -> None:
         """打印校验通过率区块"""
-        valid_data = self._calc_validate_pass_rate()
+        valid_data = self.calc_summary()["validate_pass_rate"]
         print("【校验通过率】")
         print(f"有效性通过率：{valid_data['valid']}")
         print(f"合规性通过率：{valid_data['compliant']}")

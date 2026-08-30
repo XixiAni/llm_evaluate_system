@@ -36,6 +36,8 @@ class BatchEvalRunner:
     校验器、评分器复用模块级单例，避免重复初始化开销
 
     优化点：支持自定义线程池大小、Judge-LLM独立耗时统计、优雅中断
+
+    优化点：修复resp空指针访问风险，异常路径字段兜底
     """
 
     def __init__(self, llm_client: LLMClient, concurrent_num: int = 1, judge_llm_client: Optional[LLMClient] = None, thread_pool_size: int = None):
@@ -144,7 +146,7 @@ class BatchEvalRunner:
 
                 # 2. 调用评判大模型：仅当主模型调用成功、且配置开启、且有标准答案时才执行（同享限流保护）
                 # 主模型失败时无有效回答，跳过评判避免无效Token消耗
-                if resp["code"] == 0 and self.judge_llm_client and std_ans.strip():
+                if resp and resp["code"] == 0 and self.judge_llm_client and std_ans.strip():
                     judge_user_prompt = self._judge_user_template.format(
                         standard_answer=std_ans,
                         answer_content=resp.get("data", "")
@@ -182,7 +184,7 @@ class BatchEvalRunner:
                 self._api_semaphore.release()
 
             # ========== 第三步：本地计算与校验 ==========
-            if resp["code"] == 0:
+            if resp and resp["code"] == 0:
                 single_result["success_flag"] = True
                 answer = resp["data"]
                 single_result["answer_content"] = answer
@@ -217,7 +219,7 @@ class BatchEvalRunner:
 
             else:
                 # 主模型失败不修改Judge-LLM状态，保持disabled或原有状态
-                single_result["error_msg"] = resp["msg"]
+                single_result["error_msg"] = resp["msg"] if resp else "接口调用异常，无返回信息"
 
         except Exception as e:
             single_result["error_msg"] = f"执行异常：{str(e)}"
