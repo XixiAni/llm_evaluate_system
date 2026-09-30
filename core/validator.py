@@ -2,6 +2,7 @@ import threading
 from common.logger import get_logger
 from common.yaml_reader import YamlReader
 from common.error_code import ErrorCode
+from common.compliance import compliance_checker
 
 logger = get_logger("validator")
 
@@ -13,15 +14,16 @@ class ResponseValidator:
 
     所有校验规则从eval_rules.yaml配置读取，缺失时使用默认阈值
 
-    优化点：线程安全单例模式
+    优化点：线程安全单例模式；合规逻辑抽离为独立公共组件
     """
 
     def __init__(self):
         """
         初始化校验器，从配置文件加载敏感词库与有效性校验阈值，缺失字段使用默认值兜底
+
+        合规校验复用全局 compliance_checker 单例
         """
         rules = YamlReader.read_file("eval_rules.yaml")
-        self.sensitive_words = rules.get("sensitive_words", [])
         validity_config = rules.get("validity",{})
         self.min_length = validity_config.get("min_length",5)
         self.max_repeat_rate = validity_config.get("max_repeat_rate",0.7)
@@ -45,7 +47,7 @@ class ResponseValidator:
                 - compliance_msg: 合规性校验说明
         """
         validity_result = self._validate_validity(content)
-        compliance_result = self._validate_compliance(content)
+        compliance_result = compliance_checker.check(content)
         
         return {
             "is_valid": validity_result["pass"],
@@ -127,29 +129,6 @@ class ResponseValidator:
                 "msg": f"{ErrorCode.VALID_HIGH_REPEAT.msg}：短语「{hit_phrase}」连续重复{max_repeat_times}次，超过阈值：{self.max_continuous_repeat}次"
             }
         return {"pass": True, "msg": "重复率校验通过"}
-
-    def _validate_compliance(self, content: str) -> dict:
-        """
-        执行合规性校验：敏感词匹配检测
-
-        Args:
-            content: 待校验文本
-        Returns:
-            dict: 校验结果，包含pass标记与msg说明
-        """
-        if not self.sensitive_words:
-            return{"pass": True, "msg": "未配置敏感词库，跳过合规性校验"}
-        hit_words = []
-        for word in self.sensitive_words:
-            if word in content:
-                hit_words.append(word)
-        
-        if hit_words:
-            return {
-                    "pass": False, 
-                    "msg": f"{ErrorCode.COMPLIANCE_SENSITIVE_WORD.msg}：{','.join(hit_words)}"
-                }
-        return {"pass": True, "msg": "合规性校验通过"}
 
 # ========== 线程安全单例实现 ==========
 _response_validator_instance = None
