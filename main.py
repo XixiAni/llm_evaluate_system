@@ -43,6 +43,12 @@ def parse_args() -> argparse.Namespace:
         help="API并发数，覆盖config.yaml中的eval.concurrent_num配置"
     )
     parser.add_argument(
+         "--tag", "-t",
+         type=str,
+         default=None,
+         help="按标签筛选执行用例，多个标签用逗号分隔，如 smoke,P0"
+     )
+    parser.add_argument(
         "--judge-llm",
         action="store_true",
         default=None,
@@ -79,6 +85,28 @@ def parse_args() -> argparse.Namespace:
         help="关闭执行后自动数据库备份"
     )
     return parser.parse_args()
+
+def _filter_cases_by_tag(case_list: list, tag_str: str) -> list:
+    """
+    按标签筛选用例，包含任意一个指定标签即命中
+    Args:
+        case_list: 原始用例列表
+        tag_str: 命令行传入的标签字符串，逗号分隔
+    Returns:
+        list: 筛选后的用例列表
+    """
+    if not tag_str or not tag_str.strip():
+        return case_list
+    target_tags = {tag.strip() for tag in tag_str.split(",") if tag.strip()}
+    if not target_tags:
+        return case_list
+    filtered = []
+    for case in case_list:
+        case_tags = set(case.get("tags", []))
+        if case_tags & target_tags:
+            filtered.append(case)
+    print(f"📌 按标签筛选：目标标签 {tag_str}，共匹配 {len(filtered)} 条用例")
+    return filtered
 
 if __name__ == "__main__":
     args = parse_args()
@@ -119,10 +147,15 @@ if __name__ == "__main__":
                 max_retry=app_config.judge_llm_max_retry
             )
         
-        # 3. 加载评测用例集
+        # 3. 加载评测用例集 + 按标签筛选
         case_list = YamlReader.get_test_data(args.case_file, "eval_case_list")
         if not case_list:
             print("无可用评测用例，程序退出")
+            exit(0)
+
+        case_list = _filter_cases_by_tag(case_list, args.tag)
+        if not case_list:
+            print("未筛选到匹配标签的用例，程序退出")
             exit(0)
 
         # 4. 初始化批量执行器，传入并发数、自定义线程池大小；并发数命令行优先
