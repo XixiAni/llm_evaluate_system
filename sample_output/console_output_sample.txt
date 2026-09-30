@@ -1,0 +1,59 @@
+PS D:\2026.3.4 python 练习 py. 存储\项目三-AI大模型输出质量评测系统> python main.py
+2026-09-30 15:56:08 - yaml_reader - INFO - 配置文件 config.yaml 读取完成，存入缓存
+2026-09-30 15:56:08 - config_loader - INFO - 全量配置加载与校验完成
+2026-09-30 15:56:08 - yaml_reader - INFO - 配置文件 eval_rules.yaml 读取完成，存入缓存
+Building prefix dict from the default dictionary ...
+Dumping model to file cache C:\Users\159791~1\AppData\Local\Temp\jieba.cache
+Loading model cost 0.608 seconds.
+Prefix dict has been built successfully.
+2026-09-30 15:56:09 - yaml_reader - INFO - 读取配置节点，文件：config.yaml，路径：llm.slow_threshold_ms
+2026-09-30 15:56:09 - yaml_reader - INFO - 读取配置节点，文件：config.yaml，路径：llm.slow_threshold_ms
+2026-09-30 15:56:09 - yaml_reader - INFO - 读取测试数据，文件：eval_cases.yaml，路径：eval_case_list
+2026-09-30 15:56:09 - yaml_reader - INFO - 测试数据文件 eval_cases.yaml 读取完成，存入缓存
+2026-09-30 15:56:09 - yaml_reader - INFO - 配置文件 judge_hallucination.yaml 读取完成，存入缓存
+2026-09-30 15:56:09 - batch_runner - INFO - Judge-LLM 大模型自校验模块已启用
+===== 开始批量评测，共加载 2 条评测用例，执行模式：API并发3，线程池6线程 =====
+【评测执行】【ThreadPoolExecutor-0_0】正在运行用例 EVAL_001: 基础问答能力评测：Python是什么
+【评测执行】【ThreadPoolExecutor-0_1】正在运行用例 EVAL_002: 知识准确性评测：AI测试开发职责
+2026-09-30 15:56:09 - llm_client - INFO - 【POST请求发起】接口地址：https://api.deepseek.com/v1/chat/completions，请求入参：{'model': 'deepseek-v4-flash', 'messages': [{'role': 'user', 'content': '请用一句话解释Python是什么'}], 'temperature': 0.7}
+2026-09-30 15:56:09 - llm_client - INFO - 【POST请求发起】接口地址：https://api.deepseek.com/v1/chat/completions，请求入参：{'model': 'deepseek-v4-flash', 'messages': [{'role': 'user', 'content': 'AI测试开发工程师的核心职责是什么'}], 'temperature': 0.7}
+2026-09-30 15:56:10 - llm_client - INFO - 【POST请求完成】耗时1204.54ms，返回状态码：200，统一返回码：0
+2026-09-30 15:56:16 - llm_client - WARNING - 【慢请求告警】接口：https://api.deepseek.com/v1/chat/completions，耗时5530.48ms，超过阈值1500ms，请关注网络状况或接口性能
+2026-09-30 15:56:16 - llm_client - INFO - 【POST请求完成】耗时5530.48ms，返回状态码：200，统一返回码：0
+2026-09-30 15:56:18 - llm_client - WARNING - 【慢请求告警】接口：https://api.deepseek.com/v1/chat/completions，耗时9349.06ms，超过阈值1500ms，请关注网络状况或接口性能
+2026-09-30 15:56:18 - llm_client - INFO - 【POST请求完成】耗时9349.06ms，返回状态码：200，统一返回码：0
+2026-09-30 15:56:21 - llm_client - WARNING - 【慢请求告警】接口：https://api.deepseek.com/v1/chat/completions，耗时2127.93ms，超过阈值1500ms，请关注网络状况或接口性能
+2026-09-30 15:56:21 - llm_client - INFO - 【POST请求完成】耗时2127.93ms，返回状态码：200，统一返回码：0
+===== 批量评测完成，已执行 2 条记录 =====
+
+============================================================
+【批量评测汇总结果】
+============================================================
+总用例数：2 | 成功：2条 | 失败：0条
+调用成功率：100.00%
+总耗时：11.49s | 单条平均耗时：5.75s/条
+------------------------------------------------------------
+【得分统计】
+平均总分：64.61 | 平均相关性得分：83.34 | 平均完整度得分：84.25
+------------------------------------------------------------
+【幻觉风险分布】
+无风险：0 条 0.00%
+低风险：1 条 50.00%
+中风险：1 条 50.00%
+高风险：0 条 0.00%
+未知风险：0 条 0.00%
+------------------------------------------------------------
+【校验通过率】
+有效性通过率：100.00%
+合规性通过率：100.00%
+------------------------------------------------------------
+【Judge-LLM 链路统计】
+调用总数：2 | 成功：2 | 成功率：100.0%
+接口失败：0 | 解析失败：0
+============================================================
+2026-09-30 15:56:21 - sqlite_client - INFO - 批次 batch_1790754981_aab0fe 结果已持久化，共 2 条用例
+2026-09-30 15:56:21 - sqlite_client - INFO - 数据库备份完成：./output\backup\eval_backup_20260930_155621_batch_1790754981_aab0fe.db
+√ 评测报告已导出至：./output\eval_report_20260930_155621.csv
+2026-09-30 15:56:21 - reporter - INFO - 评测报告导出完成，路径：./output\eval_report_20260930_155621.csv
+
+程序结束
