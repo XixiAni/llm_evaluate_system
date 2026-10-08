@@ -18,6 +18,10 @@ git上传记录/
 # 输出文件
 output/
 
+# 测试运行产物
+.coverage
+.pytest_cache/
+
 # 其他本地内容
 进度条.md
 笔记/
