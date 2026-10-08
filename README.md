@@ -1,5 +1,5 @@
 # AI大模型自动化评测系统
-> 最后更新时间：2026年9月 | 版本：v0.1.21
+> 最后更新时间：2026年10月 | 版本：v0.1.22
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -24,6 +24,7 @@
 - 🔧 **统一配置中心**：集中式配置加载与合法性校验，启动自动巡检配置完整性，fail-fast 快速暴露问题
 - 💾 **轻量持久化存储**：基于Python标准库SQLite零依赖实现评测结果持久化，批次+明细一对多设计，支持外键约束、WAL高性能写入模式、高频字段索引；支持历史数据回溯与多版本模型效果横向对比；支持表结构自动平滑迁移，历史数据库文件无缝兼容新版本
 - 🧩 **模块职责解耦**：合规校验逻辑抽离为独立公共组件，可多场景复用，架构严格遵循单一职责原则
+- 🧪 **单元测试覆盖**：核心公共工具与业务模块配套pytest单元测试，代码覆盖率可量化，工程化质量保障
 - 🛡️ **数据安全兜底**：SQLite自动热备份+留存策略+完整性校验，支持一键恢复
 - 🔒 **配置安全校验**：启动自动扫描明文密钥，从机制上避免敏感信息提交代码库
 - 📝 **生产级日志体系**：控制台文本+文件JSON双格式，全链路trace_id追踪，异常自动携带完整堆栈
@@ -90,10 +91,10 @@ python main.py --no-backup -o model_v2_compare.csv
 ### 4. 查看结果
 
 - 控制台输出：实时执行日志 + 评测指标汇总报告
-- CSV报告： `./output/eval_report_时间戳.csv`（默认自动追加时间戳，支持自定义文件名，Excel直接打开）
+- CSV报告： `./output/report/eval_report_时间戳.csv`（默认自动追加时间戳，支持自定义文件名，Excel直接打开）
 - 样例输出：可查看 [sample_output/](sample_output/) 目录，包含控制台输出、CSV报告、JSON结构化日志、数据库管理工具输出四类代表性样例
 - 全链路日志： `./logs/` 目录按日期独立存储，同一天多次运行自动追加
-- SQLite数据库：  `./output/eval_result.db`（支持历史数据查询、多版本对比）
+- SQLite数据库：  `./output/db/eval_result.db`（支持历史数据查询、多版本对比）
   - 命令行查询：通过 `tools/db_manager.py` 快速检索历史批次与用例明细，无需打开数据库文件
 
 ### 5. 管理历史评测数据
@@ -110,6 +111,13 @@ python tools/db_manager.py cases --batch_id batch_xxx
 # 删除指定批次（级联删除所有用例明细）
 python tools/db_manager.py delete --batch_id batch_xxx
 ```
+
+### 6. 运行单元测试
+```bash
+# 执行全量单元测试 + 覆盖率统计
+pytest
+```
+> 执行后终端显示用例执行结果与覆盖率摘要，HTML可视化报告生成至 `output/coverage/` 目录。
  
 ## 📁 项目目录结构
  
@@ -142,7 +150,16 @@ python tools/db_manager.py delete --batch_id batch_xxx
 ├── report/             # 报告输出层
 │   └── reporter.py     # CSV评测报告导出工具
 ├── logs/               # 运行日志输出目录（自动生成）
-├── output/             # 评测报告输出目录（自动生成）
+├── tests/              # 单元测试目录：核心模块测试用例与测试配置
+│   ├── test_error_code.py
+│   ├── test_yaml_reader.py
+│   ├── test_compliance.py
+│   ├── test_validator.py
+│   └── test_scorer.py
+├── output/             # 运行输出目录（自动生成）
+│   ├── report/        # CSV评测报告输出目录
+│   ├── db/            # SQLite数据库文件目录
+│   └── coverage/      # 单元测试覆盖率HTML报告目录
 ├── docs/               # 文档与示例目录
 │   └── examples/       # 扩展实现参考示例，不参与业务运行
 ├── tools/              # 配套工具层：辅助管理脚本
