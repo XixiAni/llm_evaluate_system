@@ -118,6 +118,8 @@ python tools/db_manager.py delete --batch_id batch_xxx
 pytest
 ```
 > 执行后终端显示用例执行结果与覆盖率摘要，HTML可视化报告生成至 `output/coverage/` 目录。
+> 内置 70% 覆盖率强制门禁，低于阈值整体测试任务标记失败，保障代码质量。
+当前已覆盖 9 个核心模块：common/error_code、common/yaml_reader、common/compliance、common/config_loader、common/sqlite_client、core/validator、core/scorer、core/llm_client、core/statistics。
  
 ## 📁 项目目录结构
  

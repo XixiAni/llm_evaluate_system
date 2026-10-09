@@ -113,6 +113,7 @@ pip install -r requirements.txt
     - 外键约束为会话级配置，仅作数据完整性兜底，不替代手动级联删除逻辑，删除流程仍由业务代码精准控制
     - 每次连接自动开启 `journal_mode = WAL` 写前日志模式，写入性能提升数倍，读写不阻塞，适配批量评测高并发写入场景
     - 对高频查询字段建立索引：`eval_batch.execute_time`（排序）、`eval_case_detail.batch_id`（关联查询）、`eval_case_detail.hallucination_level`（筛选统计），查询效率大幅提升
+    - 连接资源强制释放：所有业务方法均采用 `try-finally` 结构，操作完成后强制关闭数据库连接，彻底消除文件句柄泄漏隐患，Windows 环境下长期运行稳定性大幅提升。
   8. **数据安全备份体系**：
     - 在线热备份：基于SQLite原生backup API实现，备份过程不阻塞正常读写
     - 自动备份策略：批次保存后自动触发，备份文件名携带时间戳与批次标签
@@ -364,12 +365,17 @@ pip install -r requirements.txt
 - 设计原则：核心模块白盒测试为主，覆盖正向、反向、边界三类场景，保证逻辑分支覆盖度
 
 #### 4.6.2 覆盖范围
-当前已覆盖5个核心模块：
+当前已覆盖 9 个核心模块：
 - `common/error_code.py`：全局错误码枚举验证
 - `common/yaml_reader.py`：YAML读取工具功能验证
 - `common/compliance.py`：合规校验器逻辑验证
+- `common/config_loader.py`：配置加载与校验逻辑验证
+- `common/sqlite_client.py`：SQLite 持久化客户端全功能验证
+​
 - `core/validator.py`：响应有效性校验逻辑验证
 - `core/scorer.py`：评分与幻觉检测逻辑验证
+- `core/llm_client.py`：大模型请求客户端全分支验证
+- `core/statistics.py`：评测结果统计汇总逻辑验证
 
 #### 4.6.3 运行方式
 - 执行命令：项目根目录下执行 `pytest` 即可自动发现并执行所有测试用例

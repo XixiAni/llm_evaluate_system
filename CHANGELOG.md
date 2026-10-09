@@ -2,6 +2,25 @@
 所有版本变更记录在此文件中，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/) 规范。
 
+## [v0.1.23] - 2026-10-09
+### Added
+- 新增 core/config_loader、core/llm_client、common/sqlite_client、core/statistics 四个核心模块单元测试用例，覆盖正向、反向、边界三类测试场景
+- 新增 pytest 覆盖率强制门禁配置，70% 阈值校验，代码质量可量化管控
+- 新增 pytest 第三方警告过滤规则，自动屏蔽 jieba 依赖库弃用告警，输出更纯净
+
+### Changed
+- 优化 common/sqlite_client 数据库连接管理，所有业务方法显式关闭连接，消除连接泄漏隐患
+- 优化 test_yaml_reader 测试文件管理逻辑，改用 tmp_path 内置临时目录，自动回收不污染项目目录
+
+### Fixed
+- 修复 SQLite 客户端连接未显式关闭导致的文件句柄泄漏问题，Windows 环境下文件操作稳定性提升
+- 修复 test_llm_client 模块导入路径错误与 fixture 调用对象错误
+- 修复 test_sqlite_client 备份恢复测试在 Windows 环境下的 WAL 文件锁定问题
+
+### Known Issues
+- 短文本标准答案场景下，规则版幻觉检测误判率较高的固有问题仍存在
+- 单元测试暂未覆盖全量代码分支，核心模块已覆盖
+
 ## [v0.1.22] - 2026-10-08
 ### Added
 - 新增核心模块pytest单元测试体系，覆盖错误码、YAML读取、合规校验、响应校验、评分与幻觉检测5个核心模块，包含正向、反向、边界三类测试场景
