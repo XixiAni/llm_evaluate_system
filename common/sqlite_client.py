@@ -61,8 +61,10 @@ class EvalDbClient:
 
         优化：新增高频查询字段索引
         """
+        conn = None
         try:
-            with self._get_connection() as conn:
+            conn = self._get_connection()
+            with conn:
                 cursor = conn.cursor()
             # 前置查询：判断主表是否已存在，精准控制日志输出
             # 两张表绑定创建，主表存在则明细表必然存在，无需二次查询
@@ -115,7 +117,6 @@ class EvalDbClient:
                             FOREIGN KEY (batch_id) REFERENCES eval_batch(batch_id)
                         )
                     """)
-
                     # 创建索引：高频查询字段
                     cursor.execute("CREATE INDEX IF NOT EXISTS idx_batch_execute_time ON eval_batch(execute_time);")
                     cursor.execute("CREATE INDEX IF NOT EXISTS idx_case_batch_id ON eval_case_detail(batch_id);")
@@ -135,7 +136,11 @@ class EvalDbClient:
                     logger.debug("数据库表结构已存在，跳过创建，字段迁移完成")
 
         except Exception as e:
-            logger.error(f"数据库表初始化失败：{str(e)}", exc_info=True)
+            logger.error(f"数据库表结构初始化失败：{str(e)}", exc_info=True)
+
+        finally:
+            if conn:
+                conn.close()
 
     def _migrate_table_columns(self, cursor: sqlite3.Cursor) -> None:
         """
@@ -169,8 +174,10 @@ class EvalDbClient:
         Returns:
             bool: 完整返回True，损坏返回False
         """
+        conn = None
         try:
-            with self._get_connection() as conn:
+            conn = self._get_connection()
+            with conn:
                 cursor = conn.cursor()
                 cursor.execute("PRAGMA integrity_check;")
                 result = cursor.fetchone()[0]
@@ -183,6 +190,10 @@ class EvalDbClient:
         except Exception as e:
             logger.error(f"完整性检查执行异常：{str(e)}", exc_info=True)
             return False
+
+        finally:
+            if conn:
+                conn.close()
 
     def backup(self, custom_tag: str = "") -> str:
         """
@@ -197,19 +208,18 @@ class EvalDbClient:
         tag = f"_{custom_tag}" if custom_tag else ""
         backup_filename = f"eval_backup_{timestamp}{tag}.db"
         backup_path = os.path.join(self.backup_dir, backup_filename)
-        
+
         try:
             src_conn = self._get_connection()
             dst_conn = sqlite3.connect(backup_path)
             src_conn.backup(dst_conn)
             dst_conn.close()
             src_conn.close()
-            
+
             # 校验备份完整性
             backup_conn = sqlite3.connect(backup_path)
             backup_conn.execute("PRAGMA integrity_check;")
             backup_conn.close()
-
             logger.info(f"数据库备份完成：{backup_path}")
             self._clean_old_backups()
             return backup_path
@@ -223,8 +233,8 @@ class EvalDbClient:
         """清理过期备份，保留最近N份"""
         try:
             backup_files = [
-                os.path.join(self.backup_dir, f) 
-                for f in os.listdir(self.backup_dir) 
+                os.path.join(self.backup_dir, f)
+                for f in os.listdir(self.backup_dir)
                 if f.startswith("eval_backup_") and f.endswith(".db")
             ]
             backup_files.sort(key=os.path.getmtime, reverse=True)
@@ -235,6 +245,7 @@ class EvalDbClient:
                     logger.debug(f"清理过期备份：{old_file}")
         except Exception as e:
             logger.warning(f"备份清理失败：{str(e)}")
+
     def restore_from_backup(self, backup_path: str) -> bool:
         """
         从备份文件恢复数据库，恢复前自动备份当前库
@@ -247,7 +258,7 @@ class EvalDbClient:
         if not os.path.exists(backup_path):
             logger.error(f"备份文件不存在：{backup_path}")
             return False
-        
+
         # 先校验备份完整性
         try:
             check_conn = sqlite3.connect(backup_path)
@@ -259,7 +270,7 @@ class EvalDbClient:
 
         # 恢复前先备份当前库
         self.backup(custom_tag="before_restore")
-        
+
         try:
             shutil.copy2(backup_path, self.db_path)
             logger.info(f"数据库恢复成功，来源：{backup_path}")
@@ -283,9 +294,10 @@ class EvalDbClient:
         # 生成唯一批次ID：时间戳+短随机串，兼顾可读性与唯一性
         batch_id = f"batch_{int(time.time())}_{uuid.uuid4().hex[:6]}"
         execute_time = time.strftime("%Y-%m-%d %H:%M:%S")
-
+        conn = None
         try:
-            with self._get_connection() as conn:
+            conn = self._get_connection()
+            with conn:
                 cursor = conn.cursor()
 
                 # 1. 写入批次主表
@@ -334,7 +346,7 @@ class EvalDbClient:
                         item.get("hallucination_msg", ""),
                         item.get("judge_llm_status", "disabled"),
                         item.get("judge_llm_err", ""),
-                        item.get("judge_raw_resp", "")
+                        item.get("judge_raw_resp", ""),
                     ))
 
                 cursor.executemany("""
@@ -359,17 +371,23 @@ class EvalDbClient:
             logger.error(f"批次结果写入数据库失败：{str(e)}", exc_info=True)
             return ""
 
+        finally:
+            if conn:
+                conn.close()
+
     def query_batch_list(self, limit: int = 10) -> List[Dict[str, Any]]:
         """
         查询历史批次列表，按执行时间倒序
-        
+
         Args:
             limit: 返回条数，默认最近10条
         Returns:
             list: 批次信息字典列表
         """
+        conn = None
         try:
-            with self._get_connection() as conn:
+            conn = self._get_connection()
+            with conn:
                 conn.row_factory = sqlite3.Row  # 支持按字段名访问结果
                 cursor = conn.cursor()
                 cursor.execute("""
@@ -383,17 +401,23 @@ class EvalDbClient:
             logger.error(f"查询批次列表失败：{str(e)}", exc_info=True)
             return []
 
+        finally:
+            if conn:
+                conn.close()
+
     def query_batch_by_id(self, batch_id: str) -> Optional[Dict[str, Any]]:
         """
         根据批次ID查询单条批次汇总信息
-        
+
         Args:
             batch_id: 批次唯一ID
         Returns:
             dict: 批次汇总信息字典；批次不存在或查询失败返回None
         """
+        conn = None
         try:
-            with self._get_connection() as conn:
+            conn = self._get_connection()
+            with conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 cursor.execute("""
@@ -407,17 +431,23 @@ class EvalDbClient:
             logger.error(f"查询批次详情失败，batch_id={batch_id}：{str(e)}", exc_info=True)
             return None
 
+        finally:
+            if conn:
+                conn.close()
+
     def query_case_details_by_batch_id(self, batch_id: str) -> List[Dict[str, Any]]:
         """
         查询指定批次下的所有用例明细
-    
+
         Args:
             batch_id: 批次唯一ID
         Returns:
             list: 用例明细字典列表，空批次或查询失败返回空列表
         """
+        conn = None
         try:
-            with self._get_connection() as conn:
+            conn = self._get_connection()
+            with conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 cursor.execute("""
@@ -430,17 +460,24 @@ class EvalDbClient:
         except Exception as e:
             logger.error(f"查询批次明细失败，batch_id={batch_id}：{str(e)}", exc_info=True)
             return []
+
+        finally:
+            if conn:
+                conn.close()
+
     def delete_batch_by_id(self, batch_id: str) -> bool:
         """
         级联删除指定批次：先删除明细表记录，再删除主表记录，事务保证原子性
-    
+
         Args:
             batch_id: 批次唯一ID
         Returns:
             bool: 删除成功返回True，失败返回False
         """
+        conn = None
         try:
-            with self._get_connection() as conn:
+            conn = self._get_connection()
+            with conn:
                 cursor = conn.cursor()
                 # 先删明细表，再删主表，保证数据一致性
                 cursor.execute("DELETE FROM eval_case_detail WHERE batch_id = ?", (batch_id,))
@@ -456,3 +493,7 @@ class EvalDbClient:
         except Exception as e:
             logger.error(f"删除批次失败，batch_id={batch_id}：{str(e)}", exc_info=True)
             return False
+
+        finally:
+            if conn:
+                conn.close()
