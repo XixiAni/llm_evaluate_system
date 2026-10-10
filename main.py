@@ -12,13 +12,15 @@ load_dotenv(dotenv_path=env_path)
 
 # 置顶加载配置，fail-fast校验不通过直接终止
 from common.config_loader import app_config
-from common.logger import set_trace_id
+from common.logger import set_trace_id, get_logger
 from common.yaml_reader import YamlReader
 from core.llm_client import LLMClient
 from core.batch_runner import BatchEvalRunner, request_stop
 from core.statistics import EvalStatistics
 from report.reporter import EvalReporter
 from common.sqlite_client import EvalDbClient
+
+logger = get_logger("main")
 
 def _signal_handler(signum, frame):
     """SIGINT信号处理器：请求优雅停止批量任务"""
@@ -105,7 +107,7 @@ def _filter_cases_by_tag(case_list: list, tag_str: str) -> list:
         case_tags = set(case.get("tags", []))
         if case_tags & target_tags:
             filtered.append(case)
-    print(f"📌 按标签筛选：目标标签 {tag_str}，共匹配 {len(filtered)} 条用例")
+    logger.info(f"按标签筛选：目标标签 {tag_str}，共匹配 {len(filtered)} 条用例")
     return filtered
 
 if __name__ == "__main__":
@@ -198,7 +200,7 @@ if __name__ == "__main__":
 
     except Exception as e:
         print(f"\n❌ 程序运行异常：{str(e)}")
-        logger = __import__("common.logger").get_logger("main")
+
         logger.error(f"主程序运行异常：{str(e)}", exc_info=True)
 
     finally:

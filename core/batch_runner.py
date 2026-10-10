@@ -78,6 +78,7 @@ class BatchEvalRunner:
             # 等级映射：数字等级 → 项目统一字符串等级，与规则版体系对齐
             self._level_map = {0: "无", 1: "低", 2: "中", 3: "高"}
             logger.info("Judge-LLM 大模型自校验模块已启用")
+
     def run_single_case(self, case_info: Dict[str, Any]) -> Dict[str, Any]:
         """
         执行单条评测用例，完整链路：请求模型 → 有效性校验 → 合规性校验 → 评分与幻觉检测
@@ -129,7 +130,7 @@ class BatchEvalRunner:
             expect_kw = case_info.get("expect_keywords", [])
             judge_resp = None  # 评判结果预初始化
             
-            print(f"【评测执行】【{thread_id}】正在运行用例 {single_result['case_id']}: {single_result['case_desc']}")
+            logger.debug(f"【评测执行】【{thread_id}】正在运行用例 {single_result['case_id']}: {single_result['case_desc']}")
 
             # ========== 第二步：受限IO请求，信号量保护 ==========
             # 信号量限流：超出最大并发数则阻塞等待，保证API请求不超限
@@ -223,7 +224,7 @@ class BatchEvalRunner:
 
         except Exception as e:
             single_result["error_msg"] = f"执行异常：{str(e)}"
-            logger.error(f"【线程:{thread_id}】 用例:{single_result['case_id']} 运行出错：{str(e)}")
+            logger.error(f"【线程:{thread_id}】 用例:{single_result['case_id']} 运行出错：{str(e)}", exc_info=True)
 
         single_result["request_cost_ms"] = round((time.time() - start_time) * 1000, 2)
         return single_result
@@ -244,12 +245,12 @@ class BatchEvalRunner:
         self.eval_result_list.clear()
         mode_desc = "串行" if self.api_concurrent_num == 1 else f"API并发{self.api_concurrent_num}，线程池{self._thread_pool_size}线程"
 
-        print(f"===== 开始批量评测，共加载 {len(case_list)} 条评测用例，执行模式：{mode_desc} =====")
+        logger.info(f"开始批量评测，共加载 {len(case_list)} 条评测用例，执行模式：{mode_desc}")
         # 并发数为1时等价串行，直接循环执行，避免线程池额外开销
         if self.api_concurrent_num <= 1:
             for case in case_list:
                 if is_stop_requested():
-                    print("\n⚠️ 检测到中断请求，停止提交新用例")
+                    logger.warning("检测到中断请求，停止提交新用例")
                     break
 
                 self.eval_result_list.append(self.run_single_case(case))
@@ -259,14 +260,14 @@ class BatchEvalRunner:
                 futures = []
                 for case in case_list:
                     if is_stop_requested():
-                        print("\n⚠️ 检测到中断请求，停止提交新用例")
+                        logger.warning("检测到中断请求，停止提交新用例")
                         break
 
                     futures.append(executor.submit(self.run_single_case, case))
 
                 # 按提交顺序逐个取结果，保证结果列表顺序与输入用例完全一致
                 self.eval_result_list = [future.result() for future in futures]
-        print(f"===== 批量评测完成，已执行 {len(self.eval_result_list)} 条记录 =====")
+        logger.info(f"批量评测完成，已执行 {len(self.eval_result_list)} 条记录")
         return self.eval_result_list
 
     def get_all_results(self) -> List[Dict[str, Any]]:
