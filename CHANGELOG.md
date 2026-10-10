@@ -2,6 +2,19 @@
 所有版本变更记录在此文件中，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/) 规范。
 
+## [v0.1.24] - 2026-10-10
+### Added
+- 新增 core/batch_runner、report/reporter 模块单元测试，覆盖正常执行、异常隔离、边界兜底三类场景
+- 新增测试目录按模块分层结构，与源码目录一一对应，可维护性提升
+
+### Changed
+- 优化 core/batch_runner、main.py 日志体系，内部过程输出统一为分级 logger，区分调试/业务/警告/错误四级输出
+- 优化测试用例断言严谨性，补充结果顺序校验、导出字段完整性校验
+
+### Known Issues
+- 短文本标准答案场景下，规则版幻觉检测误判率较高的固有问题仍存在
+- 单元测试暂未覆盖全量代码分支，核心模块已全覆盖
+
 ## [v0.1.23] - 2026-10-09
 ### Added
 - 新增 core/config_loader、core/llm_client、common/sqlite_client、core/statistics 四个核心模块单元测试用例，覆盖正向、反向、边界三类测试场景

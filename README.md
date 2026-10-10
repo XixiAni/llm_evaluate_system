@@ -24,7 +24,7 @@
 - 🔧 **统一配置中心**：集中式配置加载与合法性校验，启动自动巡检配置完整性，fail-fast 快速暴露问题
 - 💾 **轻量持久化存储**：基于Python标准库SQLite零依赖实现评测结果持久化，批次+明细一对多设计，支持外键约束、WAL高性能写入模式、高频字段索引；支持历史数据回溯与多版本模型效果横向对比；支持表结构自动平滑迁移，历史数据库文件无缝兼容新版本
 - 🧩 **模块职责解耦**：合规校验逻辑抽离为独立公共组件，可多场景复用，架构严格遵循单一职责原则
-- 🧪 **单元测试覆盖**：核心公共工具与业务模块配套pytest单元测试，代码覆盖率可量化，工程化质量保障
+- 🧪 **单元测试覆盖**：11个核心模块全覆盖，代码覆盖率79%+，70%强制门禁保障，工程化质量可量化
 - 🛡️ **数据安全兜底**：SQLite自动热备份+留存策略+完整性校验，支持一键恢复
 - 🔒 **配置安全校验**：启动自动扫描明文密钥，从机制上避免敏感信息提交代码库
 - 📝 **生产级日志体系**：控制台文本+文件JSON双格式，全链路trace_id追踪，异常自动携带完整堆栈
@@ -118,57 +118,69 @@ python tools/db_manager.py delete --batch_id batch_xxx
 pytest
 ```
 > 执行后终端显示用例执行结果与覆盖率摘要，HTML可视化报告生成至 `output/coverage/` 目录。
-> 内置 70% 覆盖率强制门禁，低于阈值整体测试任务标记失败，保障代码质量。
-当前已覆盖 9 个核心模块：common/error_code、common/yaml_reader、common/compliance、common/config_loader、common/sqlite_client、core/validator、core/scorer、core/llm_client、core/statistics。
- 
+> 内置 70% 覆盖率强制门禁，低于阈值整体测试任务标记失败，保障代码质量。  
+当前已覆盖 11 个核心模块：  
+common/error_code、common/yaml_reader、common/compliance、common/config_loader、common/sqlite_client
+core/validator、core/scorer、core/llm_client、core/statistics、core/batch_runner
+report/reporter
+
 ## 📁 项目目录结构
  
 ```text
-├── common/             # 公共工具层：全项目复用基础组件
-│   ├── config_loader.py  # 统一配置加载与校验器，集中管理全量框架配置
-│   ├── logger.py       # 标准化日志工具，控制台+文件双输出
-│   ├── yaml_reader.py  # YAML配置读取工具，支持缓存、点式路径、环境变量占位
-│   ├── error_code.py   # 全局统一错误码枚举，按业务领域分层管理
-│   ├── compliance.py   # 内容合规性校验器，独立可复用公共组件
-│   └── sqlite_client.py # SQLite评测结果持久化客户端，零依赖轻量存储
-├── sample_output/      # 代表性输出样例目录
-│   ├── console_output_sample.txt    # 控制台运行输出样例
-│   ├── eval_report_sample.csv       # CSV评测报告样例
-│   ├── json_log_sample.log          # JSON结构化日志样例
-│   └── db_manager_output_sample.txt # 数据库管理工具输出样例
-├── config/             # 配置文件层：所有可变参数
-│   ├── config.yaml     # 全局框架配置
-│   └── eval_rules.yaml # 评测规则配置（敏感词、权重、校验阈值）
-├── prompts/            # 提示词模板层：存放LLM评判类提示词模板
-│   └── judge_hallucination.yaml
-├── core/               # 核心业务层：评测核心逻辑
-│   ├── llm_client.py   # 大模型请求客户端，统一封装接口调用
-│   ├── batch_runner.py # 批量评测执行器，负责任务调度与结果收集
-│   ├── validator.py    # 响应校验模块：有效性+合规性双校验
-│   ├── scorer.py       # 智能评分模块：多维打分 + 幻觉检测
-│   └── statistics.py   # 评测结果统计与汇总输出工具
-├── data/               # 评测数据层：YAML格式存储评测用例
-│   └── eval_cases.yaml # 评测用例集
-├── report/             # 报告输出层
-│   └── reporter.py     # CSV评测报告导出工具
-├── logs/               # 运行日志输出目录（自动生成）
-├── tests/              # 单元测试目录：核心模块测试用例与测试配置
-│   ├── test_error_code.py
-│   ├── test_yaml_reader.py
-│   ├── test_compliance.py
-│   ├── test_validator.py
-│   └── test_scorer.py
-├── output/             # 运行输出目录（自动生成）
-│   ├── report/        # CSV评测报告输出目录
-│   ├── db/            # SQLite数据库文件目录
-│   └── coverage/      # 单元测试覆盖率HTML报告目录
-├── docs/               # 文档与示例目录
-│   └── examples/       # 扩展实现参考示例，不参与业务运行
-├── tools/              # 配套工具层：辅助管理脚本
-│   └── db_manager.py   # 数据库管理命令行工具
-├── main.py             # 项目唯一入口
-├── requirements.txt    # 项目依赖清单
-└── README.md           # 项目说明文档
+├── common/             # 公共工具层：全项目复用基础组件  
+│   ├── config_loader.py  # 统一配置加载与校验器，集中管理全量框架配置  
+│   ├── logger.py       # 标准化日志工具，控制台+文件双输出  
+│   ├── yaml_reader.py  # YAML配置读取工具，支持缓存、点式路径、环境变量占位  
+│   ├── error_code.py   # 全局统一错误码枚举，按业务领域分层管理  
+│   ├── compliance.py   # 内容合规性校验器，独立可复用公共组件  
+│   └── sqlite_client.py # SQLite评测结果持久化客户端，零依赖轻量存储  
+├── sample_output/      # 代表性输出样例目录  
+│   ├── console_output_sample.txt    # 控制台运行输出样例  
+│   ├── eval_report_sample.csv       # CSV评测报告样例  
+│   ├── json_log_sample.log          # JSON结构化日志样例  
+│   └── db_manager_output_sample.txt # 数据库管理工具输出样例  
+├── config/             # 配置文件层：所有可变参数  
+│   ├── config.yaml     # 全局框架配置  
+│   └── eval_rules.yaml # 评测规则配置（敏感词、权重、校验阈值）  
+├── prompts/            # 提示词模板层：存放LLM评判类提示词模板  
+│   └── judge_hallucination.yaml  
+├── core/               # 核心业务层：评测核心逻辑  
+│   ├── llm_client.py   # 大模型请求客户端，统一封装接口调用  
+│   ├── batch_runner.py # 批量评测执行器，负责任务调度与结果收集  
+│   ├── validator.py    # 响应校验模块：有效性+合规性双校验  
+│   ├── scorer.py       # 智能评分模块：多维打分 + 幻觉检测  
+│   └── statistics.py   # 评测结果统计与汇总输出工具  
+├── data/               # 评测数据层：YAML格式存储评测用例  
+│   └── eval_cases.yaml # 评测用例集  
+├── report/             # 报告输出层  
+│   └── reporter.py     # CSV评测报告导出工具  
+├── logs/               # 运行日志输出目录（自动生成）  
+├── tests/              # 单元测试目录：核心模块测试用例与测试配置，与源码一一对应分层  
+│   ├── common/          # 公共工具层测试  
+│   │   ├── test_error_code.py  
+│   │   ├── test_yaml_reader.py  
+│   │   ├── test_compliance.py  
+│   │   ├── test_config_loader.py  
+│   │   └── test_sqlite_client.py  
+│   ├── core/            # 核心业务层测试  
+│   │   ├── test_validator.py  
+│   │   ├── test_scorer.py  
+│   │   ├── test_llm_client.py  
+│   │   ├── test_statistics.py  
+│   │   └── test_batch_runner.py  
+│   └── report/          # 报告输出层测试  
+│       └── test_reporter.py  
+├── output/             # 运行输出目录（自动生成）  
+│   ├── report/        # CSV评测报告输出目录  
+│   ├── db/            # SQLite数据库文件目录  
+│   └── coverage/      # 单元测试覆盖率HTML报告目录  
+├── docs/               # 文档与示例目录  
+│   └── examples/       # 扩展实现参考示例，不参与业务运行  
+├── tools/              # 配套工具层：辅助管理脚本  
+│   └── db_manager.py   # 数据库管理命令行工具  
+├── main.py             # 项目唯一入口  
+├── requirements.txt    # 项目依赖清单  
+└── README.md           # 项目说明文档  
 ```
 
 ## 📖 更多文档
