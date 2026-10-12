@@ -125,7 +125,8 @@ pytest
 当前已覆盖 11 个核心模块：  
 common/error_code、common/yaml_reader、common/compliance、common/config_loader、common/sqlite_client
 core/validator、core/scorer、core/llm_client、core/statistics、core/batch_runner
-report/reporter
+report/reporter  
+> 除本地执行外，提交代码到 main 分支将自动触发 GitHub Actions CI 流水线执行全量测试与覆盖率校验，执行结果可在仓库 Actions 页面查看。
 
 ## 📁 项目目录结构
  
@@ -182,6 +183,9 @@ report/reporter
 ├── tools/              # 配套工具层：辅助管理脚本  
 │   └── db_manager.py   # 数据库管理命令行工具  
 ├── main.py             # 项目唯一入口  
+├── .github/          # GitHub工程配置目录
+│   └── workflows/    # Actions自动化工作流配置
+│       └── ci.yml     # 单元测试与覆盖率校验CI流水线
 ├── requirements.txt    # 项目依赖清单  
 └── README.md           # 项目说明文档  
 ```
