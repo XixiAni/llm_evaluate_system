@@ -6,6 +6,12 @@
 ### Added
 - 新增 GitHub Actions CI 持续集成流水线，代码提交自动执行单元测试与 70% 覆盖率门禁
 - 新增 pip 依赖缓存配置，提升 CI 执行效率
+- 新增 `tests/conftest.py` 全局前置配置，精准 Mock 配置类文件读取，解除测试对真实配置文件依赖
+- 新增 CI 流水线测试文件重名预检步骤，提前发现导入冲突
+
+### Fixed
+- 修复测试文件重名导致 CI 环境 pytest 导入冲突问题
+- 修复 conftest 全局 Mock 误伤 yaml_reader 功能测试问题
 
 ## [v0.1.24] - 2026-10-10
 ### Added

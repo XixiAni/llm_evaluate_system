@@ -1,8 +1,9 @@
 # AI大模型自动化评测系统
 > 最后更新时间：2026年10月 | 版本：v0.1.25
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
+![Pytest](https://img.shields.io/badge/Pytest-7.4.4-0A9EDC)
 ![License](https://img.shields.io/badge/License-MIT-green)
-![GitHub CI](https://img.shields.io/github/actions/workflow/status/XixiAni/llm_evaluate_system/ci.yml?branch=main&style=flat&logo=python&label=Python%20CL&link=https%3A%2F%2Fgithub.com%2FXixiAni%2Fllm_evaluate_system%2Factions)
+[![GitHub CI](https://img.shields.io/github/actions/workflow/status/XixiAni/llm_evaluate_system/ci.yml?branch=main&style=flat&logo=python&label=Python%20CL&link=https%3A%2F%2Fgithub.com%2FXixiAni%2Fllm_evaluate_system%2Factions)](https://github.com/XixiAni/llm_evaluate_system/actions)
 
 
 基于 Python 开发的轻量级大模型自动化评测工具，面向AI测试开发场景，采用YAML数据驱动设计，支持批量Prompt评测、响应有效性校验、内容合规检测、规则版幻觉检测与多维度量化打分，自动生成评测报告，可用于大模型版本效果回归、基线对比、内容质量专项测试场景。
@@ -160,6 +161,7 @@ report/reporter
 │   └── reporter.py     # CSV评测报告导出工具  
 ├── logs/               # 运行日志输出目录（自动生成）  
 ├── tests/              # 单元测试目录：核心模块测试用例与测试配置，与源码一一对应分层  
+│   ├── conftest.py       # pytest全局前置配置，精准Mock配置类文件读取
 │   ├── common/          # 公共工具层测试  
 │   │   ├── test_error_code.py  
 │   │   ├── test_yaml_reader.py  
