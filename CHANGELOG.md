@@ -2,6 +2,11 @@
 所有版本变更记录在此文件中，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/) 规范。
 
+## [v0.1.25] - 2026-10-12
+### Added
+- 新增 GitHub Actions CI 持续集成流水线，代码提交自动执行单元测试与 70% 覆盖率门禁
+- 新增 pip 依赖缓存配置，提升 CI 执行效率
+
 ## [v0.1.24] - 2026-10-10
 ### Added
 - 新增 core/batch_runner、report/reporter 模块单元测试，覆盖正常执行、异常隔离、边界兜底三类场景

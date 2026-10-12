@@ -1,7 +1,9 @@
 # AI大模型自动化评测系统
-> 最后更新时间：2026年10月 | 版本：v0.1.22
+> 最后更新时间：2026年10月 | 版本：v0.1.25
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
+![GitHub CI](https://img.shields.io/github/actions/workflow/status/XixiAni/llm_evaluate_system/ci.yml?branch=main&style=flat&logo=python&label=Python%20CL&link=https%3A%2F%2Fgithub.com%2FXixiAni%2Fllm_evaluate_system%2Factions)
+
 
 基于 Python 开发的轻量级大模型自动化评测工具，面向AI测试开发场景，采用YAML数据驱动设计，支持批量Prompt评测、响应有效性校验、内容合规检测、规则版幻觉检测与多维度量化打分，自动生成评测报告，可用于大模型版本效果回归、基线对比、内容质量专项测试场景。
 
@@ -25,6 +27,7 @@
 - 💾 **轻量持久化存储**：基于Python标准库SQLite零依赖实现评测结果持久化，批次+明细一对多设计，支持外键约束、WAL高性能写入模式、高频字段索引；支持历史数据回溯与多版本模型效果横向对比；支持表结构自动平滑迁移，历史数据库文件无缝兼容新版本
 - 🧩 **模块职责解耦**：合规校验逻辑抽离为独立公共组件，可多场景复用，架构严格遵循单一职责原则
 - 🧪 **单元测试覆盖**：11个核心模块全覆盖，代码覆盖率79%+，70%强制门禁保障，工程化质量可量化
+- ⚙️ **CI/CD 持续集成**：GitHub Actions 全自动单元测试与覆盖率门禁，代码提交即质量校验，工程化标准落地
 - 🛡️ **数据安全兜底**：SQLite自动热备份+留存策略+完整性校验，支持一键恢复
 - 🔒 **配置安全校验**：启动自动扫描明文密钥，从机制上避免敏感信息提交代码库
 - 📝 **生产级日志体系**：控制台文本+文件JSON双格式，全链路trace_id追踪，异常自动携带完整堆栈
