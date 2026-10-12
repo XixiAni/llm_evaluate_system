@@ -33,5 +33,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: 检查测试文件重名
+        run: |
+          dups=$(find tests -name 'test_*.py' -printf '%f\n' | sort | uniq -d)
+          if [ -n "$dups" ]; then
+            echo "发现重复测试文件名："
+            for d in $dups; do
+              echo "  $d"
+              find tests -name "$d" -print
+            done
+            exit 1
+          fi
+          echo "无重复测试文件名"
+
       - name: 执行单元测试与覆盖率校验
         run: pytest
